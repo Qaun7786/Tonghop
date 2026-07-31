@@ -1,4 +1,4 @@
-name: 🚀 SEVER AI STV PREMIUM
+name: 🚀 macOS STV PREMIUM (SSH)
 
 on:
   workflow_dispatch:
@@ -9,428 +9,278 @@ on:
         default: '5h40m'
         type: choice
         options:
-        - '1h'
-        - '3h' 
-        - '5h40m'
-        - '10h'
-        - '12h'
+          - '1h'
+          - '3h'
+          - '5h40m'
+          - '10h'
+          - '12h'
 
 jobs:
-  Premium-RDP-Setup:
-    runs-on: windows-latest
-    # tăng timeout để hỗ trợ option 10h/12h (buffer thêm chút)
-    timeout-minutes: 780
-    
+  macOS-SSH-Setup:
+    runs-on: macos-latest
+    timeout-minutes: 780          # tương tự như bản gốc
+
     steps:
-      # BANNER CHÀO MỪNG
+      # ---------- BANNER ----------
       - name: 🎯 KHỞI ĐỘNG HỆ THỐNG
         run: |
-          Write-Host ""
-          Write-Host ""
-          Write-Host "🤖 AI STV PREMIUM RDP SERVER" -ForegroundColor Yellow
-          Write-Host "⚡ Powered by AI STV" -ForegroundColor Green
-          Write-Host "🕒 Thời gian: ${{ github.event.inputs.duration }}" -ForegroundColor Magenta
-          Write-Host ""
-          
-          # Hiệu ứng loading
-          $frames = @('⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷')
-          for($i=0; $i -lt 10; $i++) {
-              Write-Host "`r🚀 Đang khởi tạo hệ thống... $($frames[$i % 8])" -NoNewline -ForegroundColor Blue
-              Start-Sleep -Milliseconds 100
-          }
-          Write-Host "`r✅ Hệ thống đã sẵn sàng!                    " -ForegroundColor Green
+          echo ""
+          echo ""
+          echo -e "\033[1;33m🍎 AI STV PREMIUM macOS SERVER\033[0m"
+          echo -e "\033[1;32m⚡ Powered by AI STV\033[0m"
+          echo -e "\033[1;35m🕒 Thời gian: ${{ github.event.inputs.duration }}\033[0m"
+          echo ""
 
-      # CẤU HÌNH NÂNG CAO
+          # Hiệu ứng loading đơn giản
+          for i in {1..10}; do
+            echo -ne "\r🚀 Đang khởi tạo hệ thống... ⣾"
+            sleep 0.1
+            echo -ne "\r🚀 Đang khởi tạo hệ thống... ⣽"
+            sleep 0.1
+            echo -ne "\r🚀 Đang khởi tạo hệ thống... ⣻"
+            sleep 0.1
+            echo -ne "\r🚀 Đang khởi tạo hệ thống... ⢿"
+            sleep 0.1
+          done
+          echo -e "\r✅ Hệ thống đã sẵn sàng!                    "
+
+      # ---------- CẤU HÌNH HỆ THỐNG ----------
       - name: 🔧 CẤU HÌNH HỆ THỐNG
         run: |
-          Write-Host ""
-          Write-Host "🛠️  ĐANG CẤU HÌNH HỆ THỐNG" -ForegroundColor Yellow
-          
-          $steps = @(
-              @{Name="Bật Remote Desktop"; Script={ 
-                  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-              }},
-              @{Name="Tắt xác thực mạng"; Script={
-                  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-              }},
-              @{Name="Cấu hình bảo mật RDP"; Script={
-                  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
-                  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-              }},
-              @{Name="Mở port 3389 firewall"; Script={
-                  netsh advfirewall firewall add rule name="RDP-Premium" dir=in action=allow protocol=TCP localport=3389 profile=any
-                  netsh advfirewall firewall add rule name="RDP-Premium-Out" dir=out action=allow protocol=TCP localport=3389 profile=any
-              }},
-              @{Name="Khởi động dịch vụ"; Script={
-                  Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue
-                  Set-Service -Name UmRdpService -StartupType Automatic -ErrorAction SilentlyContinue
-                  Start-Service -Name TermService -ErrorAction SilentlyContinue
-                  Start-Service -Name UmRdpService -ErrorAction SilentlyContinue
-              }}
-          )
-          
-          foreach($step in $steps) {
-              Write-Host "│ 📋 $($step.Name)..." -NoNewline -ForegroundColor White
-              try {
-                  & $step.Script
-                  Write-Host "`r│ ✅ $($step.Name)" -ForegroundColor Green
-              } catch {
-                  Write-Host "`r│ ⚠️  $($step.Name) - Đã bỏ qua lỗi nhỏ" -ForegroundColor Yellow
-              }
-              Start-Sleep -Milliseconds 500
-          }
-          
-          Write-Host "🎯 Cấu hình hoàn tất!" -ForegroundColor Green
+          echo ""
+          echo "🛠️  ĐANG CẤU HÌNH HỆ THỐNG"
 
-      # TẠO USER PREMIUM - (tối ưu mật khẩu)
+          # 1) Bật SSH
+          echo "│ 📋 Bật SSH..."
+          sudo systemsetup -setremotelogin on
+
+          # 2) Mở cổng 22 trong firewall (Application Firewall)
+          echo "│ 📋 Mở port 22 firewall..."
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblock /usr/sbin/sshd
+
+          # 3) Khởi động lại SSH (để chắc chắn)
+          sudo launchctl unload /System/Library/LaunchDaemons/ssh.plist 2>/dev/null || true
+          sudo launchctl load /System/Library/LaunchDaemons/ssh.plist
+
+          echo "🎯 Cấu hình hoàn tất!"
+
+      # ---------- TẠO USER PREMIUM ----------
       - name: 👤 TẠO TÀI KHOẢN PREMIUM
         run: |
-          Write-Host ""
-          Write-Host "👤 ĐANG TẠO TÀI KHOẢN PREMIUM" -ForegroundColor Yellow
-          
-          # Hàm tạo password ngắn (8 ký tự) đảm bảo có ít nhất 1 chữ hoa, 1 chữ thường, 1 số
-          function New-PremiumPassword {
-              param()
-              $upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'   # loại I,O để tránh nhầm
-              $lower = 'abcdefghijkmnpqrstuvwxyz'
-              $numbers = '23456789'               # loại 0,1 để tránh nhầm
-              $all = $upper + $lower + $numbers
+          echo ""
+          echo "👤 ĐANG TẠO TÀI KHOẢN PREMIUM"
 
-              # đảm bảo 1 chữ hoa, 1 chữ thường, 1 chữ số
-              $pw = ''
-              $pw += $upper[(Get-Random -Minimum 0 -Maximum $upper.Length)]
-              $pw += $lower[(Get-Random -Minimum 0 -Maximum $lower.Length)]
-              $pw += $numbers[(Get-Random -Minimum 0 -Maximum $numbers.Length)]
-
-              # thêm ký tự ngẫu nhiên để đủ 8 ký tự
-              for ($i = 1; $i -le 5; $i++) {
-                  $pw += $all[(Get-Random -Minimum 0 -Maximum $all.Length)]
-              }
-
-              # trộn ngẫu nhiên vị trí các ký tự rồi trả về
-              return -join ($pw.ToCharArray() | Sort-Object { Get-Random })
+          # Hàm tạo mật khẩu ngắn (8 ký tự) – dùng /dev/urandom
+          function new_password() {
+            tr -dc 'A-HJ-NP-Za-km-z2-9' </dev/urandom 2>/dev/null | head -c 8
           }
 
-          # Nếu người dùng đặt mật khẩu tùy chỉnh (ví dụ bằng secret) thì ưu tiên dùng
-          if ($env:CUSTOM_RDP_PASS) {
-              $matKhau = $env:CUSTOM_RDP_PASS
-              Write-Host "│ ℹ️  Dùng mật khẩu tùy chỉnh từ env" -ForegroundColor Blue
-          } else {
-              $matKhau = New-PremiumPassword
-          }
+          # Nếu có secret CUSTOM_SSH_PASS thì dùng, ngược lại tạo ngẫu nhiên
+          if [ -n "$CUSTOM_SSH_PASS" ]; then
+            PASSWORD="$CUSTOM_SSH_PASS"
+            echo "│ ℹ️  Dùng mật khẩu tùy chỉnh từ env"
+          else
+            PASSWORD=$(new_password)
+          fi
 
-          $securePass = ConvertTo-SecureString $matKhau -AsPlainText -Force
-          
-          # Xóa user cũ nếu tồn tại
-          try {
-              Remove-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue
-              Write-Host "│ ✅ Đã xóa user cũ" -ForegroundColor Green
-          } catch {
-              Write-Host "│ ℹ️  Không có user cũ để xóa" -ForegroundColor Blue
-          }
-          
-          # Tạo user mới với đầy đủ quyền
-          try {
-              New-LocalUser -Name "AISTV-PREMIUM" -Password $securePass -AccountNeverExpires -Description "AI STV Premium Account"
-              Write-Host "│ ✅ Đã tạo user mới" -ForegroundColor Green
-              
-              # Đặt password không bao giờ hết hạn (dùng Set-LocalUser nếu cần)
-              try {
-                  Set-LocalUser -Name "AISTV-PREMIUM" -PasswordNeverExpires $true -ErrorAction SilentlyContinue
-              } catch {
-                  # Nếu môi trường không hỗ trợ Set-LocalUser, bỏ qua an toàn
-              }
+          # Xoá user cũ nếu tồn tại
+          sudo dscl . -delete /Users/AISTV-PREMIUM 2>/dev/null || true
+          sudo rm -rf /Users/AISTV-PREMIUM 2>/dev/null || true
 
-              # Thêm vào các nhóm cần thiết
-              Add-LocalGroupMember -Group "Administrators" -Member "AISTV-PREMIUM" -ErrorAction SilentlyContinue
-              Add-LocalGroupMember -Group "Remote Desktop Users" -Member "AISTV-PREMIUM" -ErrorAction SilentlyContinue
-              Add-LocalGroupMember -Group "Users" -Member "AISTV-PREMIUM" -ErrorAction SilentlyContinue
-              
-              # Kích hoạt user
-              Enable-LocalUser -Name "AISTV-PREMIUM"
-              
-              Write-Host "│ ✅ Đã cấp quyền Administrator & RDP" -ForegroundColor Green
-              
-          } catch {
-              Write-Host "│ ❌ Lỗi tạo user: $($_.Exception.Message)" -ForegroundColor Red
-              exit 1
-          }
-          
-          # Lưu thông tin (cẩn trọng nếu repo public)
-          echo "RDP_USER=AISTV-PREMIUM" >> $env:GITHUB_ENV
-          echo "RDP_PASS=$matKhau" >> $env:GITHUB_ENV
-          echo "$matKhau" > $env:TEMP\rdp_password.txt
-          
-          Write-Host "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng" -ForegroundColor Green
+          # Tạo user với sysadminctl (có sẵn từ macOS 10.13+)
+          # Lưu ý: sysadminctl yêu cầu mật khẩu ở dạng plaintext – có thể để trống sau đó đặt bằng dscl
+          sudo sysadminctl -addUser AISTV-PREMIUM -fullName "AI STV Premium" -password "$PASSWORD" -admin -home /Users/AISTV-PREMIUM 2>/dev/null
 
-      # KIỂM TRA QUYỀN ĐĂNG NHẬP
+          # Nếu sysadminctl không có (trên runner cũ), dùng dscl thủ công
+          if [ $? -ne 0 ]; then
+            echo "│ ⚠️  sysadminctl không dùng được, thử với dscl..."
+            sudo dscl . -create /Users/AISTV-PREMIUM
+            sudo dscl . -create /Users/AISTV-PREMIUM RealName "AI STV Premium"
+            sudo dscl . -create /Users/AISTV-PREMIUM UserShell /bin/bash
+            sudo dscl . -create /Users/AISTV-PREMIUM NFSHomeDirectory /Users/AISTV-PREMIUM
+            sudo dscl . -passwd /Users/AISTV-PREMIUM "$PASSWORD"
+            sudo dscl . -append /Groups/admin GroupMembership AISTV-PREMIUM
+            sudo createhome -c 2>/dev/null || true
+          else
+            # Đảm bảo user có quyền admin (sysadminctl -admin đã làm điều này)
+            sudo dscl . -append /Groups/admin GroupMembership AISTV-PREMIUM
+          fi
+
+          echo "│ ✅ Tạo user AISTV-PREMIUM thành công"
+
+          # Lưu thông tin vào file và biến môi trường
+          echo "RDP_USER=AISTV-PREMIUM" >> $GITHUB_ENV
+          echo "RDP_PASS=$PASSWORD" >> $GITHUB_ENV
+          echo "$PASSWORD" > /tmp/ssh_password.txt
+
+          echo "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng"
+
+      # ---------- KIỂM TRA QUYỀN ----------
       - name: 🔍 KIỂM TRA QUYỀN HỆ THỐNG
         run: |
-          Write-Host ""
-          Write-Host "🔍 KIỂM TRA QUYỀN ĐĂNG NHẬP" -ForegroundColor Yellow
-          
-          # Kiểm tra user tồn tại
-          $user = Get-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue
-          if ($user) {
-              Write-Host "│ ✅ User AISTV-PREMIUM tồn tại" -ForegroundColor Green
-              Write-Host "│ 📊 Trạng thái: $($user.Enabled)" -ForegroundColor White
-          } else {
-              Write-Host "│ ❌ User không tồn tại" -ForegroundColor Red
-              exit 1
-          }
-          
-          # Kiểm tra quyền Administrator
-          $isAdmin = (Get-LocalGroupMember -Group "Administrators" | Where-Object {$_.Name -like "*AISTV-PREMIUM"}).Count -gt 0
-          if ($isAdmin) {
-              Write-Host "│ ✅ Có quyền Administrator" -ForegroundColor Green
-          } else {
-              Write-Host "│ ❌ Không có quyền Administrator" -ForegroundColor Red
-          }
-          
-          # Kiểm tra quyền Remote Desktop
-          $isRDPUser = (Get-LocalGroupMember -Group "Remote Desktop Users" | Where-Object {$_.Name -like "*AISTV-PREMIUM"}).Count -gt 0
-          if ($isRDPUser) {
-              Write-Host "│ ✅ Có quyền Remote Desktop" -ForegroundColor Green
-          } else {
-              Write-Host "│ ❌ Không có quyền Remote Desktop" -ForegroundColor Red
-          }
-          
-          # Kiểm tra dịch vụ RDP
-          $termService = Get-Service -Name TermService -ErrorAction SilentlyContinue
-          if ($termService.Status -eq 'Running') {
-              Write-Host "│ ✅ Dịch vụ TermService đang chạy" -ForegroundColor Green
-          } else {
-              Write-Host "│ ❌ Dịch vụ TermService không chạy" -ForegroundColor Red
-          }
-          
-          Write-Host "🎯 Kiểm tra hoàn tất!" -ForegroundColor Green
+          echo ""
+          echo "🔍 KIỂM TRA QUYỀN ĐĂNG NHẬP"
 
-      # TAILSCALE PREMIUM
+          # Kiểm tra user tồn tại
+          if id "AISTV-PREMIUM" &>/dev/null; then
+            echo "│ ✅ User AISTV-PREMIUM tồn tại"
+          else
+            echo "│ ❌ User không tồn tại"
+            exit 1
+          fi
+
+          # Kiểm tra quyền admin
+          if groups AISTV-PREMIUM | grep -q admin; then
+            echo "│ ✅ Có quyền Administrator (admin)"
+          else
+            echo "│ ❌ Không có quyền admin"
+          fi
+
+          # Kiểm tra SSH đang chạy
+          if sudo systemsetup -getremotelogin | grep -q On; then
+            echo "│ ✅ SSH đang bật"
+          else
+            echo "│ ❌ SSH chưa bật"
+          fi
+
+          echo "🎯 Kiểm tra hoàn tất!"
+
+      # ---------- TAILSCALE ----------
       - name: 🌐 THIẾT LẬP MẠNG PREMIUM
         env:
           TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          Write-Host ""
-          Write-Host "🌐 ĐANG THIẾT LẬP KẾT NỐI MẠNG" -ForegroundColor Yellow
-          
-          # Cài đặt Tailscale
-          try {
-              $msiPath = "$env:TEMP\tailscale-premium.msi"
-              Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msiPath
-              Start-Process msiexec.exe -ArgumentList "/i", "`"$msiPath`"", "/quiet", "/norestart" -Wait
-              Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
-              Write-Host "│ ✅ Cài đặt Tailscale thành công" -ForegroundColor Green
-          } catch {
-              Write-Host "│ ❌ Lỗi cài đặt Tailscale" -ForegroundColor Red
-          }
-          
-          # Chờ dịch vụ khởi động
-          Start-Sleep -Seconds 10
-          
-          # Kết nối Tailscale
-          try {
-              & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=$env:TAILSCALE_AUTH_KEY --hostname=ai-stv-premium-$env:GITHUB_RUN_ID --accept-routes --accept-dns --reset
-              Write-Host "│ ✅ Kết nối Tailscale thành công" -ForegroundColor Green
-          } catch {
-              Write-Host "│ ❌ Lỗi kết nối Tailscale" -ForegroundColor Red
-          }
-          
-          # Lấy IP với retry mechanism
-          Write-Host "🔄 Đang lấy địa chỉ IP..." -NoNewline -ForegroundColor Blue
-          $ip = $null
-          for($i=0; $i -lt 20; $i++) {
-              try {
-                  $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4 2>&1
-                  if ($ip -and $ip -match '^\d+\.\d+\.\d+\.\d+$') {
-                      echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
-                      Write-Host "`r✅ Địa chỉ IP: $ip" -ForegroundColor Green
-                      break
-                  }
-              } catch {
-                  # Bỏ qua lỗi và thử lại
-              }
-              Write-Host "`r🔄 Đang lấy địa chỉ IP... $(@('.', '..', '...')[$i % 3])" -NoNewline -ForegroundColor Blue
-              Start-Sleep -Seconds 3
-          }
-          
-          if (-not $ip -or $ip -notmatch '^\d+\.\d+\.\d+\.\d+$') {
-              Write-Host "`r⚠️  Không thể lấy IP, sử dụng localhost" -ForegroundColor Yellow
-              echo "TAILSCALE_IP=localhost" >> $env:GITHUB_ENV
-          }
+          echo ""
+          echo "🌐 ĐANG THIẾT LẬP KẾT NỐI MẠNG"
 
-      # HIỂN THỊ GIAO DIỆN ĐẸP
+          # Cài Tailscale (dùng brew hoặc curl)
+          if ! command -v tailscale &>/dev/null; then
+            # Cài bằng brew (nhanh hơn)
+            if command -v brew &>/dev/null; then
+              brew install tailscale
+            else
+              # Fallback: tải trực tiếp
+              curl -fsSL https://tailscale.com/install.sh | sh
+            fi
+          fi
+
+          # Kết nối Tailscale
+          sudo tailscale up --authkey="$TAILSCALE_AUTH_KEY" --hostname="ai-stv-macos-$GITHUB_RUN_ID" --accept-routes --accept-dns --reset
+
+          # Lấy IP (có retry)
+          IP=""
+          for i in {1..20}; do
+            IP=$(tailscale ip -4 2>/dev/null)
+            if [[ -n "$IP" && "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "✅ Địa chỉ IP: $IP"
+              echo "TAILSCALE_IP=$IP" >> $GITHUB_ENV
+              break
+            fi
+            echo -ne "\r🔄 Đang lấy IP... $(printf '.%.0s' $(seq 1 $((i % 3)))) "
+            sleep 3
+          done
+
+          if [ -z "$IP" ]; then
+            echo -e "\r⚠️  Không thể lấy IP, sử dụng localhost"
+            echo "TAILSCALE_IP=localhost" >> $GITHUB_ENV
+          fi
+
+      # ---------- HIỂN THỊ THÔNG TIN ----------
       - name: 🎉 THÔNG TIN KẾT NỐI
         run: |
-          $matKhau = Get-Content $env:TEMP\rdp_password.txt -ErrorAction SilentlyContinue
-          if (-not $matKhau) {
-              $matKhau = "Không thể đọc mật khẩu"
-          }
-          
-          # Chuyển đổi thời gian từ input sang phút (đã bổ sung 10h và 12h)
-          $durationInput = "${{ github.event.inputs.duration }}"
-          switch ($durationInput) {
-              "1h" { $totalMinutes = 60; $displayTime = "1 giờ" }
-              "3h" { $totalMinutes = 180; $displayTime = "3 giờ" }
-              "5h40m" { $totalMinutes = 340; $displayTime = "5 giờ 40 phút" }
-              "10h" { $totalMinutes = 600; $displayTime = "10 giờ" }
-              "12h" { $totalMinutes = 720; $displayTime = "12 giờ" }
-              default { $totalMinutes = 340; $displayTime = "5 giờ 40 phút (mặc định)" }
-          }
-          
-          # Tính thời gian chính xác
-          $timeZone = [System.TimeZoneInfo]::FindSystemTimeZoneById("SE Asia Standard Time")
-          $thoiGianBatDau = [System.TimeZoneInfo]::ConvertTimeFromUtc((Get-Date).ToUniversalTime(), $timeZone)
-          $thoiGianKetThuc = $thoiGianBatDau.AddMinutes($totalMinutes)
-          
-          Write-Host ""
-          Write-Host "┌───────────────────────────────────────────┐" -ForegroundColor Cyan
-          Write-Host "│              🎉 KẾT NỐI THÀNH CÔNG!              │" -ForegroundColor Cyan
-          Write-Host "├───────────────────────────────────────────┤" -ForegroundColor Cyan
-          Write-Host "│ 🌐  Địa chỉ: $env:TAILSCALE_IP" -ForegroundColor White
-          Write-Host "│ 👤  Tài khoản: AISTV-PREMIUM" -ForegroundColor White
-          Write-Host "│ 🔐  Mật khẩu: $matKhau" -ForegroundColor White
-          Write-Host "│ ⏰  Thời lượng: $displayTime" -ForegroundColor White
-          Write-Host "│ 🕐  Bắt đầu: $($thoiGianBatDau.ToString('HH:mm:ss'))" -ForegroundColor White
-          Write-Host "│ 🕐  Kết thúc: $($thoiGianKetThuc.ToString('HH:mm:ss'))" -ForegroundColor White
-          Write-Host "│ 📍  Port: 3389" -ForegroundColor White
-          Write-Host "├───────────────────────────────────────────┤" -ForegroundColor Cyan
-          Write-Host "│ 💡  Hướng dẫn:                                    │" -ForegroundColor Cyan
-          Write-Host "│   1. Mở Remote Desktop Connection                 │" -ForegroundColor Yellow
-          Write-Host "│   2. Nhập: $env:TAILSCALE_IP                      │" -ForegroundColor Yellow
-          Write-Host "│   3. User: AISTV-PREMIUM | Password: trên          │" -ForegroundColor Yellow
-          Write-Host "│   4. Enjoy! 🚀                                    │" -ForegroundColor Yellow
-          Write-Host "└───────────────────────────────────────────┘" -ForegroundColor Cyan
-          
-          # Lưu thời gian vào biến môi trường
-          echo "TOTAL_MINUTES=$totalMinutes" >> $env:GITHUB_ENV
+          PASSWORD=$(cat /tmp/ssh_password.txt 2>/dev/null || echo "Không thể đọc mật khẩu")
 
-      # DUY TRÌ PHIÊN ỔN ĐỊNH
+          # Tính thời gian
+          DURATION_INPUT="${{ github.event.inputs.duration }}"
+          case "$DURATION_INPUT" in
+            "1h")   TOTAL_MINUTES=60; DISPLAY_TIME="1 giờ" ;;
+            "3h")   TOTAL_MINUTES=180; DISPLAY_TIME="3 giờ" ;;
+            "5h40m") TOTAL_MINUTES=340; DISPLAY_TIME="5 giờ 40 phút" ;;
+            "10h")  TOTAL_MINUTES=600; DISPLAY_TIME="10 giờ" ;;
+            "12h")  TOTAL_MINUTES=720; DISPLAY_TIME="12 giờ" ;;
+            *)      TOTAL_MINUTES=340; DISPLAY_TIME="5 giờ 40 phút (mặc định)" ;;
+          esac
+
+          # Múi giờ UTC+7 (tương tự bản gốc)
+          START_TIME=$(date -u -j -f "%s" "$(date +%s)" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || date -u "+%Y-%m-%d %H:%M:%S")
+          # Tính end time bằng date (BSD date cần -v)
+          END_TIME=$(date -v+${TOTAL_MINUTES}M +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "Không tính được")
+
+          echo ""
+          echo "┌───────────────────────────────────────────┐"
+          echo "│              🎉 KẾT NỐI THÀNH CÔNG!              │"
+          echo "├───────────────────────────────────────────┤"
+          echo "│ 🌐  Địa chỉ: $TAILSCALE_IP"
+          echo "│ 👤  Tài khoản: AISTV-PREMIUM"
+          echo "│ 🔐  Mật khẩu: $PASSWORD"
+          echo "│ ⏰  Thời lượng: $DISPLAY_TIME"
+          echo "│ 🕐  Bắt đầu: $START_TIME"
+          echo "│ 🕐  Kết thúc: $END_TIME"
+          echo "│ 📍  Port: 22 (SSH)"
+          echo "├───────────────────────────────────────────┤"
+          echo "│ 💡  Hướng dẫn:                                    │"
+          echo "│   1. Mở Terminal và gõ:                          │"
+          echo "│      ssh AISTV-PREMIUM@$TAILSCALE_IP             │"
+          echo "│   2. Nhập mật khẩu trên.                         │"
+          echo "│   3. Enjoy! 🚀                                    │"
+          echo "└───────────────────────────────────────────┘"
+
+          echo "TOTAL_MINUTES=$TOTAL_MINUTES" >> $GITHUB_ENV
+
+      # ---------- DUY TRÌ PHIÊN ----------
       - name: ⏳ DUY TRÌ PHIÊN LÀM VIỆC
         run: |
-          $matKhau = Get-Content $env:TEMP\rdp_password.txt -ErrorAction SilentlyContinue
+          PASSWORD=$(cat /tmp/ssh_password.txt 2>/dev/null)
+          if [ -z "$TOTAL_MINUTES" ]; then
+            TOTAL_MINUTES=340
+          fi
 
-          # FALLBACK: nếu TOTAL_MINUTES chưa set (an toàn)
-          if (-not $env:TOTAL_MINUTES -or -not [int]::TryParse($env:TOTAL_MINUTES, [ref]$null)) {
-              Write-Host "⚠️ TOTAL_MINUTES không tồn tại hoặc không hợp lệ. Dùng fallback 340 phút." -ForegroundColor Yellow
-              $totalMinutes = 340
-          } else {
-              $totalMinutes = [int]$env:TOTAL_MINUTES
-          }
+          START_TIME=$(date -u -j -f "%s" "$(date +%s)" "+%s" 2>/dev/null || date -u "+%s")
+          END_EPOCH=$((START_TIME + TOTAL_MINUTES * 60))
 
-          # Tính thời gian chính xác
-          $timeZone = [System.TimeZoneInfo]::FindSystemTimeZoneById("SE Asia Standard Time")
-          $thoiGianBatDau = [System.TimeZoneInfo]::ConvertTimeFromUtc((Get-Date).ToUniversalTime(), $timeZone)
-          $thoiGianKetThuc = $thoiGianBatDau.AddMinutes($totalMinutes)
-          
-          Write-Host ""
-          Write-Host "🔄 BẮT ĐẦU DUY TRÌ PHIÊN LÀM VIỆC..." -ForegroundColor Yellow
-          Write-Host "💎 Phiên: AI STV PREMIUM" -ForegroundColor Magenta
-          Write-Host "🔗 Kết nối: $env:TAILSCALE_IP" -ForegroundColor Cyan
-          Write-Host "🕐 Bắt đầu: $($thoiGianBatDau.ToString('HH:mm:ss'))" -ForegroundColor Green
-          Write-Host "🕐 Kết thúc: $($thoiGianKetThuc.ToString('HH:mm:ss'))" -ForegroundColor Green
-          Write-Host ""
-          
-          # Tạo process giám sát hệ thống
-          $monitorScript = {
-              $lastLogTime = Get-Date
-              while ($true) {
-                  $currentTime = Get-Date
-                  
-                  # Log trạng thái mỗi 2 phút
-                  if (($currentTime - $lastLogTime).TotalMinutes -ge 2) {
-                      # Kiểm tra dịch vụ
-                      $termService = Get-Service -Name TermService -ErrorAction SilentlyContinue
-                      $rdpConnections = Get-NetTCPConnection -LocalPort 3389 -ErrorAction SilentlyContinue | Where-Object {$_.State -eq 'Established'}
-                      
-                      Write-Host "[$($currentTime.ToString('HH:mm:ss'))] 📊 Trạng thái - RDP: $($termService.Status), Kết nối: $($rdpConnections.Count)" -ForegroundColor Blue
-                      $lastLogTime = $currentTime
-                  }
-                  
-                  # Kiểm tra và khởi động lại dịch vụ nếu cần
-                  $termService = Get-Service -Name TermService -ErrorAction SilentlyContinue
-                  if ($termService.Status -ne 'Running') {
-                      Write-Host "[$($currentTime.ToString('HH:mm:ss'))] 🔄 Khởi động lại TermService..." -ForegroundColor Yellow
-                      Start-Service -Name TermService -ErrorAction SilentlyContinue
-                  }
-                  
-                  Start-Sleep -Seconds 30
-              }
-          }
-          
-          # Chạy monitor trong background
-          Start-Job -ScriptBlock $monitorScript -Name "SystemMonitor"
-          
-          # Hiển thị timer chính
-          $frames = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')
-          $colors = @('Red', 'Yellow', 'Green', 'Cyan', 'Blue', 'Magenta')
-          $startTime = Get-Date
-          
-          do {
-              $thoiGianHienTai = [System.TimeZoneInfo]::ConvertTimeFromUtc((Get-Date).ToUniversalTime(), $timeZone)
-              $thoiGianConLai = $thoiGianKetThuc - $thoiGianHienTai
-              
-              $gioConLai = [math]::Max(0, [math]::Floor($thoiGianConLai.TotalHours))
-              $phutConLai = [math]::Max(0, [math]::Floor($thoiGianConLai.TotalMinutes % 60))
-              $giayConLai = [math]::Max(0, [math]::Floor($thoiGianConLai.TotalSeconds % 60))
-              
-              $frame = $frames[([int]((Get-Date) - $startTime).TotalSeconds) % $frames.Length]
-              $color = $colors[([int]((Get-Date) - $startTime).TotalMinutes) % $colors.Length]
-              
-              Write-Host "`r$frame [$($thoiGianHienTai.ToString('HH:mm:ss'))] Thời gian còn lại: $gioConLai giờ $phutConLai phút $giayConLai giây" -NoNewline -ForegroundColor $color
-              
-              Start-Sleep -Seconds 5
-              
-          } while ($thoiGianConLai.TotalSeconds -gt 0)
-          
-          Write-Host ""
-          Write-Host "🎯 ĐÃ HẾT THỜI GIAN - TỰ ĐỘNG DỪNG!" -ForegroundColor Red
-          
-          # Dọn dẹp jobs
-          Get-Job -Name "SystemMonitor" -ErrorAction SilentlyContinue | Stop-Job -PassThru | Remove-Job -Force
+          echo ""
+          echo "🔄 BẮT ĐẦU DUY TRÌ PHIÊN LÀM VIỆC..."
+          echo "💎 Phiên: AI STV PREMIUM (macOS)"
+          echo "🔗 Kết nối: $TAILSCALE_IP (SSH port 22)"
+          echo ""
 
-      # DỌN DẸP CHUYÊN NGHIỆP
+          while true; do
+            NOW=$(date -u "+%s")
+            REMAINING=$((END_EPOCH - NOW))
+            if [ $REMAINING -le 0 ]; then
+              break
+            fi
+
+            HOURS=$((REMAINING / 3600))
+            MINUTES=$(( (REMAINING % 3600) / 60 ))
+            SECONDS=$((REMAINING % 60))
+
+            printf "\r⏳ Thời gian còn lại: %02d:%02d:%02d" $HOURS $MINUTES $SECONDS
+            sleep 5
+          done
+
+          echo ""
+          echo "🎯 ĐÃ HẾT THỜI GIAN - TỰ ĐỘNG DỪNG!"
+
+      # ---------- DỌN DẸP ----------
       - name: 🧹 DỌN DẸP HỆ THỐNG
         if: always()
         run: |
-          Write-Host ""
-          Write-Host "🧹 ĐANG DỌN DẸP HỆ THỐNG..." -ForegroundColor Yellow
-          
-          $cleanupSteps = @(
-              @{Name="Xóa file password"; Script={
-                  Remove-Item "$env:TEMP\rdp_password.txt" -ErrorAction SilentlyContinue
-              }},
-              @{Name="Vô hiệu hóa user"; Script={
-                  Disable-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue
-              }},
-              @{Name="Đóng kết nối mạng"; Script={
-                  & "$env:ProgramFiles\Tailscale\tailscale.exe" down --accept-risk=all -ErrorAction SilentlyContinue
-                  Start-Sleep -Seconds 5
-              }},
-              @{Name="Xóa rule firewall"; Script={
-                  netsh advfirewall firewall delete rule name="RDP-Premium" dir=in -ErrorAction SilentlyContinue
-                  netsh advfirewall firewall delete rule name="RDP-Premium-Out" dir=out -ErrorAction SilentlyContinue
-                  Remove-NetFirewallRule -DisplayName "RDP-Premium" -ErrorAction SilentlyContinue
-                  Remove-NetFirewallRule -DisplayName "RDP-Premium-Out" -ErrorAction SilentlyContinue
-              }},
-              @{Name="Khôi phục cài đặt RDP"; Script={
-                  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force -ErrorAction SilentlyContinue
-                  Stop-Service -Name TermService -Force -ErrorAction SilentlyContinue
-              }}
-          )
-          
-          foreach($step in $cleanupSteps) {
-              Write-Host "│ 🗑️  $($step.Name)..." -NoNewline -ForegroundColor Gray
-              try {
-                  & $step.Script
-                  Write-Host "`r│ ✅ $($step.Name)" -ForegroundColor Green
-              } catch {
-                  Write-Host "`r│ ⚠️  $($step.Name) - Đã xử lý an toàn" -ForegroundColor Yellow
-              }
-              Start-Sleep -Milliseconds 300
-          }
-          
-          # Dọn dẹp jobs còn sót
-          Get-Job | Stop-Job -PassThru | Remove-Job -Force -ErrorAction SilentlyContinue
-          
-          Write-Host ""
-          Write-Host "🎉 Dọn dẹp hoàn tất! Hẹn gặp lại! 👋" -ForegroundColor Green
+          echo ""
+          echo "🧹 ĐANG DỌN DẸP HỆ THỐNG..."
+
+          # Xóa file mật khẩu
+          rm -f /tmp/ssh_password.txt
+
+          # Tắt SSH
+          sudo systemsetup -setremotelogin off || true
+
+          # Xóa user (nếu muốn)
+          sudo dscl . -delete /Users/AISTV-PREMIUM || true
+          sudo rm -rf /Users/AISTV-PREMIUM || true
+
+          # Ngắt Tailscale
+          sudo tailscale down --accept-risk=all || true
+
+          echo "🎉 Dọn dẹp hoàn tất! Hẹn gặp lại! 👋"
