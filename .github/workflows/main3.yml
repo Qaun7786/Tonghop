@@ -41,48 +41,23 @@ jobs:
           done
           echo -e "\r✅ Hệ thống đã sẵn sàng!                    "
 
-      # ---------- CÀI ĐẶT MÔI TRƯỜNG DESKTOP (XFCE + xRDP) ----------
-      - name: 🖥️ CÀI ĐẶT DESKTOP & RDP
+      # ---------- CÀI ĐẶT DESKTOP ----------
+      - name: 🖥️ CÀI ĐẶT XFCE & xRDP
         run: |
           echo ""
           echo "🖥️  ĐANG CÀI ĐẶT XFCE + xRDP..."
 
-          # Cập nhật hệ thống
+          # Cập nhật và cài đặt
           sudo apt update -y
-          
-          # Cài đặt XFCE Desktop Environment
           sudo DEBIAN_FRONTEND=noninteractive apt install -y \
             xfce4 \
             xfce4-goodies \
             xrdp \
             dbus-x11 \
             xorg \
-            xserver-xorg-core \
-            xserver-xorg-video-dummy \
-            policykit-1 \
-            network-manager-gnome \
-            xubuntu-icon-theme \
-            xfce4-terminal \
-            thunar \
-            mousepad \
-            ristretto
+            xserver-xorg-core
 
-          # Cài đặt thêm các gói hữu ích
-          sudo apt install -y \
-            htop \
-            nano \
-            vim \
-            curl \
-            wget \
-            git \
-            firefox \
-            chromium-browser \
-            ubuntu-restricted-extras \
-            unzip \
-            zip \
-            build-essential
-
-          # Đảm bảo D-Bus được cấu hình đúng
+          # Cấu hình D-Bus
           sudo systemctl enable dbus
           sudo systemctl start dbus
 
@@ -90,118 +65,17 @@ jobs:
           sudo systemctl enable xrdp
           sudo systemctl start xrdp
 
-          # Tạo thư mục cấu hình cho XFCE trong /etc/skel
-          sudo mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/
-          sudo mkdir -p /etc/skel/.config/autostart
-          sudo mkdir -p /etc/skel/.config/xfce4/desktop
-          sudo mkdir -p /etc/skel/.config/xfce4-session/
-
           # Tạo file .xsession cho user
-          echo "xfce4-session" | sudo tee /etc/skel/.xsession
-          echo "xfce4-session" | sudo tee /root/.xsession
+          echo "startxfce4" | sudo tee /etc/skel/.xsession
+          echo "startxfce4" | sudo tee /root/.xsession
 
           # Tạo file .xinitrc
-          echo "exec xfce4-session" | sudo tee /etc/skel/.xinitrc
-          echo "exec xfce4-session" | sudo tee /root/.xinitrc
+          echo "exec startxfce4" | sudo tee /etc/skel/.xinitrc
+          echo "exec startxfce4" | sudo tee /root/.xinitrc
 
-          # Tạo file cấu hình xfce4-session.xml (QUAN TRỌNG để tránh lỗi failsafe)
-          sudo tee /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <channel name="xfce4-session" version="1.0">
-            <property name="general" type="empty">
-              <property name="FailsafeSessionName" type="string" value="Default"/>
-              <property name="SessionName" type="string" value="Default"/>
-              <property name="SaveOnExit" type="bool" value="false"/>
-            </property>
-            <property name="sessions" type="empty">
-              <property name="Default" type="empty">
-                <property name="Startup" type="empty">
-                  <property name="0" type="int" value="0"/>
-                </property>
-              </property>
-            </property>
-          </channel>
-          EOF
-
-          # Tạo file cấu hình desktop
-          sudo tee /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <channel name="xfce4-desktop" version="1.0">
-            <property name="backdrop" type="empty">
-              <property name="screen0" type="empty">
-                <property name="monitor0" type="empty">
-                  <property name="workspace0" type="empty">
-                    <property name="last-image" type="string" value="/usr/share/xfce4/backdrops/xfce-blue.png"/>
-                    <property name="image-style" type="int" value="5"/>
-                    <property name="image-show" type="bool" value="true"/>
-                  </property>
-                </property>
-              </property>
-            </property>
-            <property name="desktop-icons" type="empty">
-              <property name="style" type="int" value="0"/>
-            </property>
-          </channel>
-          EOF
-
-          # Tạo file panel cấu hình
-          sudo tee /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <channel name="xfce4-panel" version="1.0">
-            <property name="panels" type="array">
-              <value type="int" value="1"/>
-              <property name="panel-1" type="empty">
-                <property name="position" type="string" value="p=6;x=0;y=0"/>
-                <property name="length" type="int" value="100"/>
-                <property name="size" type="int" value="30"/>
-                <property name="plugin-ids" type="array">
-                  <value type="int" value="1"/>
-                  <value type="int" value="2"/>
-                  <value type="int" value="3"/>
-                  <value type="int" value="4"/>
-                </property>
-              </property>
-            </property>
-          </channel>
-          EOF
-
-          # Tạo file xfce4-session.rc để tránh lỗi
-          sudo tee /etc/skel/.config/xfce4-session/session.rc << 'EOF'
-          [Failsafe]
-          FailsafeSessionName=Default
-          EOF
-
-          # Tạo file xfce4-session.rc mặc định toàn hệ thống
-          sudo mkdir -p /etc/xdg/xfce4-session/
-          sudo tee /etc/xdg/xfce4-session/session.rc << 'EOF'
-          [Failsafe]
-          FailsafeSessionName=Default
-          EOF
-
-          # Cấu hình xrdp để sử dụng Xorg
-          sudo sed -i 's/^port=3389/port=3389/g' /etc/xrdp/xrdp.ini
-          sudo sed -i 's/^use_vsock=false/use_vsock=false/g' /etc/xrdp/xrdp.ini
-          
-          # Thêm section Xorg vào xrdp.ini (nếu chưa có)
-          if ! grep -q "^\[Xorg\]" /etc/xrdp/xrdp.ini; then
-            sudo tee -a /etc/xrdp/xrdp.ini << 'EOF'
-          [Xorg]
-          name=Xorg
-          lib=libxup.so
-          username=ask
-          password=ask
-          ip=127.0.0.1
-          port=-1
-          code=20
-          EOF
-          fi
-
-          # Cấu hình startwm.sh
+          # Cấu hình startwm.sh cho xrdp
           sudo tee /etc/xrdp/startwm.sh << 'EOF'
           #!/bin/sh
-          # xrdp X session start script (c) 2015, 2020 mirabilos
-          # published under The MirOS Licence
-
           if test -r /etc/profile; then
             . /etc/profile
           fi
@@ -226,14 +100,13 @@ jobs:
 
           # Mở port 3389 trên firewall
           sudo ufw allow 3389/tcp || true
-          sudo ufw allow 3389/udp || true
 
-          # Restart xrdp để áp dụng cấu hình
+          # Restart xrdp
           sudo systemctl restart xrdp
 
           echo "✅ Cài đặt hoàn tất!"
 
-      # ---------- TẠO USER PREMIUM ----------
+      # ---------- TẠO USER ----------
       - name: 👤 TẠO TÀI KHOẢN PREMIUM
         run: |
           echo ""
@@ -250,35 +123,24 @@ jobs:
             fi
           fi
 
-          # Xóa user cũ nếu có
+          # Xóa user cũ
           sudo userdel -r AISTV-PREMIUM 2>/dev/null || true
 
           # Tạo user mới
           sudo useradd -m -s /bin/bash AISTV-PREMIUM
           echo "AISTV-PREMIUM:$PASSWORD" | sudo chpasswd
 
-          # Thêm vào nhóm sudo và cho phép sudo không cần mật khẩu
+          # Thêm vào nhóm sudo
           sudo usermod -aG sudo AISTV-PREMIUM
-          sudo usermod -aG adm AISTV-PREMIUM
-          sudo usermod -aG ssl-cert AISTV-PREMIUM
-          
           echo "AISTV-PREMIUM ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/AISTV-PREMIUM
 
           # Copy cấu hình từ /etc/skel
           sudo cp -r /etc/skel/. /home/AISTV-PREMIUM/
           sudo chown -R AISTV-PREMIUM:AISTV-PREMIUM /home/AISTV-PREMIUM
 
-          # Đảm bảo các thư mục và file cấu hình được tạo đúng
-          sudo mkdir -p /home/AISTV-PREMIUM/.config/xfce4/xfconf/xfce-perchannel-xml/
-          sudo mkdir -p /home/AISTV-PREMIUM/.config/xfce4-session/
-
-          # Tạo lại file .xsession cho user
-          echo "xfce4-session" | sudo tee /home/AISTV-PREMIUM/.xsession
-          echo "exec xfce4-session" | sudo tee /home/AISTV-PREMIUM/.xinitrc
-          
-          # Set permissions
-          sudo chmod 644 /home/AISTV-PREMIUM/.xsession
-          sudo chmod 755 /home/AISTV-PREMIUM/.xinitrc
+          # Tạo file .xsession cho user
+          echo "startxfce4" | sudo tee /home/AISTV-PREMIUM/.xsession
+          echo "exec startxfce4" | sudo tee /home/AISTV-PREMIUM/.xinitrc
           sudo chown AISTV-PREMIUM:AISTV-PREMIUM /home/AISTV-PREMIUM/.xsession
           sudo chown AISTV-PREMIUM:AISTV-PREMIUM /home/AISTV-PREMIUM/.xinitrc
 
@@ -288,37 +150,6 @@ jobs:
           echo "$PASSWORD" > /tmp/rdp_password.txt
 
           echo "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng"
-
-      # ---------- KIỂM TRA HỆ THỐNG ----------
-      - name: 🔍 KIỂM TRA CẤU HÌNH
-        run: |
-          echo ""
-          echo "🔍 KIỂM TRA CẤU HÌNH HỆ THỐNG"
-
-          # Kiểm tra user
-          if id "AISTV-PREMIUM" &>/dev/null; then
-            echo "│ ✅ User AISTV-PREMIUM tồn tại"
-          else
-            echo "│ ❌ User không tồn tại"
-            exit 1
-          fi
-
-          # Kiểm tra xrdp
-          if systemctl is-active --quiet xrdp; then
-            echo "│ ✅ xrdp đang chạy"
-          else
-            echo "│ ❌ xrdp không chạy"
-            sudo systemctl status xrdp
-          fi
-
-          # Kiểm tra port 3389
-          if ss -tuln | grep -q ":3389"; then
-            echo "│ ✅ Port 3389 đang lắng nghe"
-          else
-            echo "│ ❌ Port 3389 không lắng nghe"
-          fi
-
-          echo "🎯 Kiểm tra hoàn tất!"
 
       # ---------- TAILSCALE ----------
       - name: 🌐 THIẾT LẬP MẠNG PREMIUM
@@ -386,24 +217,23 @@ jobs:
           echo "│ ⏰  Thời lượng: $DISPLAY_TIME"
           echo "│ 🕐  Bắt đầu: $START_DATE (UTC)"
           echo "│ 🕐  Kết thúc: $END_DATE (UTC)"
+          echo "│ 📍  Port: 3389 (RDP)"
           echo "├───────────────────────────────────────────────────────┤"
           echo "│ 💡  HƯỚNG DẪN KẾT NỐI:                                    │"
           echo "│                                                               │"
           echo "│  Windows:                                                   │"
           echo "│    - Mở Remote Desktop Connection (mstsc)                    │"
           echo "│    - Nhập: $TAILSCALE_IP                                    │"
-          echo "│    - User: AISTV-PREMIUM                                     │"
-          echo "│    - Password: $PASSWORD                                    │"
           echo "│                                                               │"
           echo "│  macOS:                                                     │"
           echo "│    - Cài Microsoft Remote Desktop từ App Store              │"
           echo "│    - Add PC → PC name: $TAILSCALE_IP                       │"
-          echo "│    - User: AISTV-PREMIUM                                     │"
-          echo "│    - Password: $PASSWORD                                    │"
           echo "│                                                               │"
           echo "│  Linux:                                                     │"
-          echo "│    - Cài Remmina: sudo apt install remmina                   │"
-          echo "│    - Chọn RDP → Nhập IP và credentials                      │"
+          echo "│    - Remmina hoặc Vinagre: $TAILSCALE_IP                   │"
+          echo "│                                                               │"
+          echo "│  Username: AISTV-PREMIUM                                      │"
+          echo "│  Password: $PASSWORD                                        │"
           echo "├───────────────────────────────────────────────────────┤"
           echo "│ 🚀  Enjoy your Ubuntu Desktop!                                  │"
           echo "└───────────────────────────────────────────────────────┘"
@@ -459,7 +289,7 @@ jobs:
         if: always()
         run: |
           echo ""
-          echo "🧹 ĐANG DỌN DỄP HỆ THỐNG..."
+          echo "🧹 ĐANG DỌN DẸP HỆ THỐNG..."
 
           # Xóa file mật khẩu
           rm -f /tmp/rdp_password.txt
@@ -470,7 +300,6 @@ jobs:
           
           # Xóa firewall rules
           sudo ufw delete allow 3389/tcp || true
-          sudo ufw delete allow 3389/udp || true
 
           # Xóa user
           sudo userdel -r AISTV-PREMIUM 2>/dev/null || true
