@@ -49,22 +49,66 @@ jobs:
 
           # Cập nhật và cài đặt các gói cần thiết
           sudo apt update -y
-          sudo apt install -y xfce4 xfce4-goodies xrdp htop nano
+          sudo apt install -y xfce4 xfce4-goodies xrdp htop nano dbus-x11
 
-          # Cấu hình xrdp
+          # Tạo cấu hình cho xrdp
           sudo systemctl enable xrdp
           sudo systemctl start xrdp
 
-          # Tạo file .xsession để khởi động XFCE
-          echo "xfce4-session" > ~/.xsession
-          sudo cp ~/.xsession /etc/skel/
-          sudo chmod 644 /etc/skel/.xsession
+          # Cấu hình XFCE cho user root và user mới
+          # Tạo thư mục và file cấu hình XFCE
+          sudo mkdir -p /etc/xdg/xfce4
+          sudo mkdir -p /etc/skel/.config/xfce4
 
-          # Mở port 3389 trên firewall (ufw nếu có)
+          # Tạo file .xsession
+          echo "xfce4-session" | sudo tee /etc/skel/.xsession
+          echo "xfce4-session" | sudo tee /root/.xsession
+
+          # Tạo file xfce4-session.conf để tránh lỗi failsafe
+          echo '<?xml version="1.0" encoding="UTF-8"?>
+          <channel name="xfce4-session" version="1.0">
+            <property name="general" type="empty">
+              <property name="FailsafeSessionName" type="string" value="Default"/>
+            </property>
+          </channel>' | sudo tee /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml
+
+          # Tạo file xfce4-desktop.xml mặc định
+          echo '<?xml version="1.0" encoding="UTF-8"?>
+          <channel name="xfce4-desktop" version="1.0">
+            <property name="backdrop" type="empty">
+              <property name="screen0" type="empty">
+                <property name="monitor0" type="empty">
+                  <property name="workspace0" type="empty">
+                    <property name="last-image" type="string" value="/usr/share/xfce4/backdrops/xfce-blue.png"/>
+                  </property>
+                </property>
+              </property>
+            </property>
+          </channel>' | sudo tee /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+
+          # Cấu hình xrdp để sử dụng Xorg
+          sudo sed -i 's/port=3389/port=3389/g' /etc/xrdp/xrdp.ini
+          sudo sed -i 's/use_vsock=false/use_vsock=false/g' /etc/xrdp/xrdp.ini
+
+          # Thêm cấu hình cho xrdp sử dụng Xorg
+          echo "[Xorg]
+          name=Xorg
+          lib=libxup.so
+          username=ask
+          password=ask
+          ip=127.0.0.1
+          port=-1
+          code=20" | sudo tee -a /etc/xrdp/xrdp.ini
+
+          # Tạo file .xinitrc cho user
+          echo "xfce4-session" | sudo tee /etc/skel/.xinitrc
+
+          # Mở port 3389 trên firewall
           sudo ufw allow 3389/tcp || true
 
-          # Cho phép kết nối không cần mật khẩu (tùy chọn)
-          # Tạo user và mật khẩu ở bước sau
+          # Tạo thư mục cho user mới (sẽ được copy từ /etc/skel)
+          sudo mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/
+          sudo cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
 
           echo "✅ Cài đặt hoàn tất!"
 
@@ -92,12 +136,17 @@ jobs:
           sudo usermod -aG sudo AISTV-PREMIUM
           echo "AISTV-PREMIUM ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/AISTV-PREMIUM
 
-          # Tạo thư mục .config và .xsession cho user
-          sudo mkdir -p /home/AISTV-PREMIUM/.config
+          # Tạo cấu hình cho user
+          sudo mkdir -p /home/AISTV-PREMIUM/.config/xfce4/xfconf/xfce-perchannel-xml/
+          sudo cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml /home/AISTV-PREMIUM/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
+          sudo cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml /home/AISTV-PREMIUM/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
+
+          # Tạo .xsession và .xinitrc
           echo "xfce4-session" | sudo tee /home/AISTV-PREMIUM/.xsession
+          echo "xfce4-session" | sudo tee /home/AISTV-PREMIUM/.xinitrc
           sudo chown -R AISTV-PREMIUM:AISTV-PREMIUM /home/AISTV-PREMIUM
 
-          # Thêm user vào nhóm ssl-cert (cần cho xrdp)
+          # Thêm user vào nhóm ssl-cert
           sudo usermod -aG ssl-cert AISTV-PREMIUM
 
           echo "│ ✅ Tạo user AISTV-PREMIUM thành công"
@@ -222,7 +271,7 @@ jobs:
         if: always()
         run: |
           echo ""
-          echo "🧹 ĐANG DỌN DẸP HỆ THỐNG..."
+          echo "🧹 ĐANG DỌN DỄP HỆ THỐNG..."
 
           rm -f /tmp/rdp_password.txt
 
