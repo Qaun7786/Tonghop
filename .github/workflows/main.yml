@@ -55,7 +55,10 @@ jobs:
           fi
 
           # Cài đặt các gói cần thiết
-          brew install x11vnc tigervnc-viewer xorg-server
+          brew install x11vnc tigervnc-viewer
+          
+          # Cài XQuartz (cung cấp X server)
+          brew install --cask xquartz
 
           # Tạo thư mục cho VNC
           mkdir -p ~/.vnc
@@ -113,18 +116,43 @@ jobs:
 
           echo "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng"
 
-      # ---------- KHỞI TẠO X SERVER ẢO VÀ VNC ----------
-      - name: 🔧 CẤU HÌNH REMOTE SCREEN (VNC)
+      # ---------- CÀI ĐẶT XFCE VÀ KHỞI TẠO VNC ----------
+      - name: 🔧 CÀI ĐẶT XFCE & CẤU HÌNH VNC
         run: |
           echo ""
-          echo "🔧 CẤU HÌNH REMOTE SCREEN VNC..."
+          echo "🔧 CÀI ĐẶT XFCE DESKTOP VÀ CẤU HÌNH VNC..."
 
-          # Tạo X server ảo sử dụng Xvfb (có sẵn trong xorg-server)
-          # Xvfb tạo một màn hình ảo trong bộ nhớ
+          # Cài đặt XFCE và các gói cần thiết
+          brew install xfce4-session xfce4-panel xfce4-settings \
+                       xfdesktop xfwm4 thunar xfce4-terminal \
+                       mousepad ristretto
+
+          # Tạo cấu hình cho XFCE
+          mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml/
+          mkdir -p ~/.config/xfce4-session/
+          
+          # Tạo file cấu hình xfce4-session
+          cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <channel name="xfce4-session" version="1.0">
+            <property name="general" type="empty">
+              <property name="FailsafeSessionName" type="string" value="Default"/>
+              <property name="SessionName" type="string" value="Default"/>
+              <property name="SaveOnExit" type="bool" value="false"/>
+            </property>
+          </channel>
+          EOF
+
+          # Tạo file .xsession
+          echo "xfce4-session" > ~/.xsession
+          echo "exec xfce4-session" > ~/.xinitrc
+
+          # Tạo X server ảo sử dụng Xvfb (từ XQuartz)
           export DISPLAY=:99
           
           echo "│ 📋 Khởi tạo X server ảo (Xvfb)..."
-          Xvfb :99 -screen 0 1280x1024x24 &
+          # Sử dụng Xvfb từ XQuartz
+          /opt/X11/bin/Xvfb :99 -screen 0 1280x1024x24 &
           XVFB_PID=$!
           
           # Đợi Xvfb khởi tạo
@@ -142,22 +170,12 @@ jobs:
           export XDG_RUNTIME_DIR=/tmp/xdg-runtime
           mkdir -p $XDG_RUNTIME_DIR
           
-          # Khởi tạo một session manager đơn giản
-          echo "│ 📋 Khởi tạo X session..."
+          # Khởi động XFCE session
+          echo "│ 📋 Khởi động XFCE desktop..."
+          xfce4-session --display :99 &
           
-          # Chạy một window manager tối thiểu để có thể tương tác
-          # Sử dụng fluxbox (cài qua brew) hoặc dùng xterm đơn giản
-          if ! command -v fluxbox &>/dev/null; then
-            brew install fluxbox
-          fi
-          
-          # Start fluxbox window manager
-          fluxbox -display :99 &
-          sleep 3
-
-          # Start một terminal để có thể tương tác
-          xterm -display :99 -geometry 80x24+100+100 &
-          sleep 2
+          # Đợi XFCE khởi tạo
+          sleep 10
 
           # Khởi động x11vnc kết nối tới Xvfb
           echo "│ 📋 Khởi động x11vnc VNC server..."
@@ -173,6 +191,9 @@ jobs:
                        -shared \
                        -rfbport 5900 \
                        -xkb \
+                       -noxrecord \
+                       -noxfixes \
+                       -noxdamage \
                        -logfile ~/.vnc/x11vnc.log \
                        > ~/.vnc/vnc.log 2>&1 &
 
@@ -185,49 +206,21 @@ jobs:
             echo "│ ✅ Màn hình ảo đã sẵn sàng"
           else
             echo "│ ❌ x11vnc không khởi động được"
+            echo "│ 📋 Log file:"
             cat ~/.vnc/vnc.log
             exit 1
           fi
 
-          echo "✅ Cấu hình VNC hoàn tất!"
+          # Kiểm tra XFCE đang chạy
+          if pgrep -f xfce4-session > /dev/null; then
+            echo "│ ✅ XFCE session đang chạy"
+          else
+            echo "│ ⚠️  XFCE session không chạy, thử khởi động lại..."
+            xfce4-session --display :99 &
+            sleep 5
+          fi
 
-      # ---------- CÀI ĐẶT MÔI TRƯỜNG DESKTOP (XFCE) ----------
-      - name: 🖥️ CÀI ĐẶT XFCE DESKTOP
-        run: |
-          echo ""
-          echo "🖥️  ĐANG CÀI ĐẶT XFCE DESKTOP..."
-
-          # Cài XFCE và các gói cần thiết
-          brew install xfce4-session xfce4-panel xfce4-settings \
-                       xfdesktop xfwm4 thunar xfce4-terminal \
-                       mousepad ristretto
-
-          # Tạo cấu hình cho XFCE
-          mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml/
-          
-          # Tạo file cấu hình xfce4-session
-          cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <channel name="xfce4-session" version="1.0">
-            <property name="general" type="empty">
-              <property name="FailsafeSessionName" type="string" value="Default"/>
-            </property>
-          </channel>
-          EOF
-
-          # Tạo file .xsession
-          echo "xfce4-session" > ~/.xsession
-          echo "exec xfce4-session" > ~/.xinitrc
-
-          # Khởi động XFCE session trên display :99
-          export DISPLAY=:99
-          export XDG_RUNTIME_DIR=/tmp/xdg-runtime
-          
-          echo "│ 📋 Khởi động XFCE desktop..."
-          xfce4-session --display :99 &
-          sleep 10
-
-          echo "✅ XFCE desktop đã được cài đặt!"
+          echo "✅ Cấu hình hoàn tất!"
 
       # ---------- TAILSCALE ----------
       - name: 🌐 THIẾT LẬP MẠNG PREMIUM
@@ -325,7 +318,7 @@ jobs:
           echo "│    ssh AISTV-PREMIUM@$TAILSCALE_IP                         │"
           echo "│    Password: $PASSWORD                                      │"
           echo "├───────────────────────────────────────────────────────┤"
-          echo "│ 🚀  Enjoy your remote macOS session!                           │"
+          echo "│ 🚀  Enjoy your remote macOS session with XFCE!               │"
           echo "└───────────────────────────────────────────────────────┘"
 
           echo "TOTAL_MINUTES=$TOTAL_MINUTES" >> $GITHUB_ENV
@@ -355,16 +348,22 @@ jobs:
               break
             fi
             
-            # Kiểm tra VNC server mỗi 2 phút
+            # Kiểm tra các process mỗi 2 phút
             if (( REMAINING % 120 < 5 )); then
               if ! pgrep -f x11vnc > /dev/null; then
                 echo -e "\n⚠️  VNC server đã dừng, khởi động lại..."
                 export DISPLAY=:99
-                nohup x11vnc -display :99 -rfbauth ~/.vnc/passwd -forever -shared -rfbport 5900 -xkb &
+                echo "$VNC_PASS" | x11vnc -storepasswd - > ~/.vnc/passwd 2>/dev/null
+                nohup x11vnc -display :99 -rfbauth ~/.vnc/passwd -forever -shared -rfbport 5900 -xkb -noxrecord -noxfixes -noxdamage &
               fi
               if ! pgrep -f Xvfb > /dev/null; then
                 echo -e "\n⚠️  Xvfb đã dừng, khởi động lại..."
-                Xvfb :99 -screen 0 1280x1024x24 &
+                /opt/X11/bin/Xvfb :99 -screen 0 1280x1024x24 &
+              fi
+              if ! pgrep -f xfce4-session > /dev/null; then
+                echo -e "\n⚠️  XFCE session đã dừng, khởi động lại..."
+                export DISPLAY=:99
+                xfce4-session --display :99 &
               fi
             fi
             
@@ -388,7 +387,6 @@ jobs:
           # Dừng tất cả các process
           pkill -f x11vnc 2>/dev/null || true
           pkill -f Xvfb 2>/dev/null || true
-          pkill -f fluxbox 2>/dev/null || true
           pkill -f xfce4-session 2>/dev/null || true
 
           # Xóa file mật khẩu
