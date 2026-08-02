@@ -1,4 +1,4 @@
-name: 🍎 macOS STV PREMIUM (VNC Remote - Native)
+name: 🍎 macOS STV PREMIUM (VNC Remote)
 
 on:
   workflow_dispatch:
@@ -41,27 +41,6 @@ jobs:
           done
           echo -e "\r✅ Hệ thống đã sẵn sàng!                    "
 
-      # ---------- CÀI ĐẶT CÔNG CỤ ----------
-      - name: 🖥️ CÀI ĐẶT VNC SERVER
-        run: |
-          echo ""
-          echo "🖥️  ĐANG CÀI ĐẶT VNC SERVER..."
-
-          # Cài đặt Homebrew nếu chưa có
-          if ! command -v brew &>/dev/null; then
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
-            eval "$(/opt/homebrew/bin/brew shellenv)"
-          fi
-
-          # Cài đặt x11vnc (VNC server)
-          brew install x11vnc
-
-          # Tạo thư mục cho VNC
-          mkdir -p ~/.vnc
-
-          echo "✅ Cài đặt VNC hoàn tất!"
-
       # ---------- TẠO USER VÀ MẬT KHẨU ----------
       - name: 👤 TẠO TÀI KHOẢN PREMIUM
         run: |
@@ -80,7 +59,7 @@ jobs:
           fi
 
           # Lưu mật khẩu
-          echo "$VNC_PASSWORD" > ~/.vnc/passwd.txt
+          echo "$VNC_PASSWORD" > /tmp/vnc_password.txt
 
           # Tạo user mới (macOS)
           sudo dscl . -delete /Users/AISTV-PREMIUM 2>/dev/null || true
@@ -109,83 +88,10 @@ jobs:
           echo "│ ✅ Tạo user AISTV-PREMIUM thành công"
           echo "VNC_USER=AISTV-PREMIUM" >> $GITHUB_ENV
           echo "VNC_PASS=$VNC_PASSWORD" >> $GITHUB_ENV
-          echo "$VNC_PASSWORD" > /tmp/vnc_password.txt
 
           echo "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng"
 
-      # ---------- CẤU HÌNH SCREEN SHARING (TÍCH HỢP SẴN) ----------
-      - name: 🔧 CẤU HÌNH REMOTE SCREEN
-        run: |
-          echo ""
-          echo "🔧 CẤU HÌNH REMOTE SCREEN..."
-
-          # Cách 1: Bật Apple Remote Desktop (ARD)
-          echo "│ 📋 Bật Apple Remote Desktop..."
-          
-          # Kích hoạt ARD Agent
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate \
-            -configure -access -on \
-            -configure -allowAccessFor -specifiedUsers \
-            -configure -users AISTV-PREMIUM \
-            -configure -restart -agent -menu
-
-          # Đặt mật khẩu VNC cho ARD
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -configure -clientopts -setvnclegacy -vnclegacy yes \
-            -configure -clientopts -setvncpw -vncpw "$VNC_PASS"
-
-          # Restart ARD
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
-
-          echo "│ ✅ Apple Remote Desktop đã được bật!"
-
-          # Cách 2: Chạy x11vnc như một fallback (nếu ARD không hoạt động)
-          echo "│ 📋 Khởi động x11vnc (fallback)..."
-          
-          # Lấy display hiện tại hoặc tạo mới
-          export DISPLAY=:0
-          
-          # Kiểm tra display
-          if ! command -v xdpyinfo &>/dev/null || ! xdpyinfo -display :0 2>/dev/null; then
-            echo "│ ⚠️  Display :0 không tồn tại, sử dụng màn hình ảo"
-            
-            # Cài XQuartz
-            brew install --cask xquartz
-            
-            # Khởi động XQuartz
-            open -a XQuartz
-            sleep 5
-            
-            export DISPLAY=:0
-          fi
-
-          # Tạo file mật khẩu
-          echo "$VNC_PASS" | x11vnc -storepasswd - > ~/.vnc/passwd 2>/dev/null
-          chmod 600 ~/.vnc/passwd
-
-          # Chạy x11vnc
-          nohup x11vnc -display :0 \
-                       -rfbauth ~/.vnc/passwd \
-                       -forever \
-                       -shared \
-                       -rfbport 5901 \
-                       -xkb \
-                       -logfile ~/.vnc/x11vnc.log \
-                       > ~/.vnc/vnc.log 2>&1 &
-
-          sleep 3
-
-          if pgrep -f x11vnc > /dev/null; then
-            echo "│ ✅ x11vnc đang chạy trên port 5901 (fallback)"
-          else
-            echo "│ ⚠️  x11vnc không chạy, log:"
-            cat ~/.vnc/vnc.log 2>/dev/null || echo "No log"
-          fi
-
-          echo "✅ Cấu hình hoàn tất!"
-
-      # ---------- TAILSCALE ----------
+      # ---------- CÀI ĐẶT TAILSCALE ----------
       - name: 🌐 THIẾT LẬP MẠNG PREMIUM
         env:
           TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
@@ -212,7 +118,7 @@ jobs:
           # Kết nối với auth key
           echo "│ 📋 Kết nối Tailscale..."
           sudo tailscale up --authkey="$TAILSCALE_AUTH_KEY" \
-                            --hostname="ai-stv-macos-vnc-$GITHUB_RUN_ID" \
+                            --hostname="ai-stv-macos-$GITHUB_RUN_ID" \
                             --accept-routes --accept-dns --reset
 
           # Lấy IP
@@ -233,18 +139,63 @@ jobs:
             echo "TAILSCALE_IP=localhost" >> $GITHUB_ENV
           fi
 
-      # ---------- CÀI ĐẶT THÊM ỨNG DỤNG CHO MACOS ----------
+      # ---------- CẤU HÌNH REMOTE SCREEN ----------
+      - name: 🔧 CẤU HÌNH REMOTE SCREEN
+        run: |
+          echo ""
+          echo "🔧 CẤU HÌNH REMOTE SCREEN (Apple Remote Desktop)"
+
+          # Bật Apple Remote Desktop với mật khẩu VNC
+          echo "│ 📋 Cấu hình ARD..."
+          
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate \
+            -configure -access -on \
+            -configure -allowAccessFor -specifiedUsers \
+            -configure -users AISTV-PREMIUM \
+            -configure -restart -agent -menu
+
+          # Đặt mật khẩu VNC cho ARD
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -configure -clientopts -setvnclegacy -vnclegacy yes \
+            -configure -clientopts -setvncpw -vncpw "$VNC_PASS"
+
+          # Restart ARD
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
+
+          echo "│ ✅ Apple Remote Desktop đã được bật!"
+
+          # Kiểm tra ARD đang chạy
+          if pgrep -f ARDAgent > /dev/null; then
+            echo "│ ✅ ARDAgent đang chạy"
+          else
+            echo "│ ⚠️  ARDAgent không chạy, thử khởi động lại..."
+            sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
+            sleep 3
+            if pgrep -f ARDAgent > /dev/null; then
+              echo "│ ✅ ARDAgent đã được khởi động"
+            else
+              echo "│ ❌ Không thể khởi động ARDAgent"
+            fi
+          fi
+
+          echo "✅ Cấu hình hoàn tất!"
+
+      # ---------- CÀI ĐẶT ỨNG DỤNG (TÙY CHỌN) ----------
       - name: 📦 CÀI ĐẶT ỨNG DỤNG HỮU ÍCH
         run: |
           echo ""
-          echo "📦 CÀI ĐẶT ỨNG DỤNG HỮU ÍCH..."
+          echo "📦 CÀI ĐẶT ỨNG DỤNG HỮU ÍCH (Có thể mất vài phút)"
 
-          # Cài đặt các ứng dụng phổ biến
-          brew install --cask firefox google-chrome visual-studio-code \
-                       sublime-text slack discord
+          # Cài đặt Homebrew nếu chưa có
+          if ! command -v brew &>/dev/null; then
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+          fi
 
-          # Cài đặt công cụ dòng lệnh
-          brew install git wget curl htop nano vim tmux screenfetch
+          # Cài đặt các công cụ dòng lệnh
+          brew install git wget curl htop nano vim tmux
 
           echo "✅ Cài đặt ứng dụng hoàn tất!"
 
@@ -274,33 +225,27 @@ jobs:
           echo "├───────────────────────────────────────────────────────┤"
           echo "│ 🌐  Địa chỉ IP: $TAILSCALE_IP"
           echo "│ 👤  Tài khoản: AISTV-PREMIUM"
-          echo "│ 🔐  Mật khẩu: $PASSWORD"
+          echo "│ 🔐  Mật khẩu VNC: $PASSWORD"
+          echo "│ 🔐  SSH Password: $PASSWORD"
           echo "│ ⏰  Thời lượng: $DISPLAY_TIME"
           echo "│ 🕐  Bắt đầu: $START_DATE (UTC)"
           echo "│ 🕐  Kết thúc: $END_DATE (UTC)"
           echo "├───────────────────────────────────────────────────────┤"
-          echo "│ 📍  PORT: 5900 (Apple Remote Desktop - ưu tiên)      │"
-          echo "│ 📍  PORT: 5901 (x11vnc - fallback)                   │"
-          echo "│ 📍  PORT: 22 (SSH)                                   │"
+          echo "│ 📍  PORT: 5900 (VNC - Apple Remote Desktop)              │"
+          echo "│ 📍  PORT: 22 (SSH)                                      │"
           echo "├───────────────────────────────────────────────────────┤"
           echo "│ 💡  HƯỚNG DẪN KẾT NỐI:                                    │"
           echo "│                                                               │"
-          echo "│  Cách 1 - Apple Remote Desktop (VNC - ưu tiên):             │"
+          echo "│  Cách 1 - VNC Client (GUI):                                  │"
           echo "│    - macOS: Finder → Go → Connect to Server                 │"
           echo "│      Nhập: vnc://$TAILSCALE_IP                              │"
-          echo "│    - Windows/Linux: VNC Viewer → $TAILSCALE_IP:5900        │"
+          echo "│    - Windows: TigerVNC, RealVNC, TightVNC                   │"
+          echo "│      Server: $TAILSCALE_IP:5900                            │"
+          echo "│    - Linux: Remmina, TigerVNC, Vinagre                     │"
           echo "│                                                               │"
-          echo "│  Cách 2 - x11vnc (fallback):                                 │"
-          echo "│    - VNC Viewer → $TAILSCALE_IP:5901                       │"
-          echo "│                                                               │"
-          echo "│  Cách 3 - SSH (terminal):                                    │"
+          echo "│  Cách 2 - SSH (terminal):                                    │"
           echo "│    ssh AISTV-PREMIUM@$TAILSCALE_IP                         │"
           echo "│    Password: $PASSWORD                                      │"
-          echo "├───────────────────────────────────────────────────────┤"
-          echo "│ 📦  Ứng dụng đã cài:                                        │"
-          echo "│    - Firefox, Google Chrome, VS Code, Sublime Text          │"
-          echo "│    - Slack, Discord                                         │"
-          echo "│    - Git, wget, curl, htop, vim, tmux                      │"
           echo "├───────────────────────────────────────────────────────┤"
           echo "│ 🚀  Enjoy your remote macOS session!                           │"
           echo "└───────────────────────────────────────────────────────┘"
@@ -319,8 +264,8 @@ jobs:
 
           echo ""
           echo "🔄 BẮT ĐẦU DUY TRÌ PHIÊN LÀM VIỆC..."
-          echo "💎 Phiên: AI STV PREMIUM (macOS Native)"
-          echo "🔗 Kết nối VNC: $TAILSCALE_IP:5900 (ưu tiên)"
+          echo "💎 Phiên: AI STV PREMIUM (macOS)"
+          echo "🔗 Kết nối VNC: $TAILSCALE_IP:5900"
           echo "🔗 Kết nối SSH: $TAILSCALE_IP:22"
           echo ""
 
@@ -332,20 +277,11 @@ jobs:
               break
             fi
             
-            # Kiểm tra các service mỗi 2 phút
+            # Kiểm tra ARD mỗi 2 phút
             if (( REMAINING % 120 < 5 )); then
-              # Kiểm tra Apple Remote Desktop
               if ! pgrep -f ARDAgent > /dev/null; then
                 echo -e "\n⚠️  ARDAgent đã dừng, khởi động lại..."
                 sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
-              fi
-              
-              # Kiểm tra x11vnc
-              if ! pgrep -f x11vnc > /dev/null; then
-                echo -e "\n⚠️  x11vnc đã dừng, khởi động lại..."
-                export DISPLAY=:0
-                echo "$VNC_PASS" | x11vnc -storepasswd - > ~/.vnc/passwd 2>/dev/null
-                nohup x11vnc -display :0 -rfbauth ~/.vnc/passwd -forever -shared -rfbport 5901 -xkb &
               fi
             fi
             
@@ -366,15 +302,11 @@ jobs:
           echo ""
           echo "🧹 ĐANG DỌN DẸP HỆ THỐNG..."
 
-          # Dừng tất cả các process
-          pkill -f x11vnc 2>/dev/null || true
-          
           # Tắt Apple Remote Desktop
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate -configure -access -off 2>/dev/null || true
 
           # Xóa file mật khẩu
           rm -f /tmp/vnc_password.txt
-          rm -rf ~/.vnc
 
           # Xóa user
           sudo dscl . -delete /Users/AISTV-PREMIUM 2>/dev/null || true
