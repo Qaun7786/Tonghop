@@ -41,8 +41,8 @@ jobs:
           done
           echo -e "\r✅ Hệ thống đã sẵn sàng!                    "
 
-      # ---------- CÀI ĐẶT VNC & CÔNG CỤ ----------
-      - name: 🖥️ CÀI ĐẶT VNC SERVER
+      # ---------- CÀI ĐẶT CÔNG CỤ ----------
+      - name: 🖥️ CÀI ĐẶT VNC SERVER & X SERVER
         run: |
           echo ""
           echo "🖥️  ĐANG CÀI ĐẶT VNC SERVER..."
@@ -54,16 +54,13 @@ jobs:
             eval "$(/opt/homebrew/bin/brew shellenv)"
           fi
 
-          # Cài đặt x11vnc (VNC server) - đây là phương pháp chính
-          brew install x11vnc
-
-          # Cài đặt tigervnc-viewer (để test)
-          brew install tigervnc-viewer
+          # Cài đặt các gói cần thiết
+          brew install x11vnc tigervnc-viewer xorg-server
 
           # Tạo thư mục cho VNC
           mkdir -p ~/.vnc
 
-          echo "✅ Cài đặt VNC hoàn tất!"
+          echo "✅ Cài đặt hoàn tất!"
 
       # ---------- TẠO USER VÀ MẬT KHẨU ----------
       - name: 👤 TẠO TÀI KHOẢN PREMIUM
@@ -116,44 +113,66 @@ jobs:
 
           echo "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng"
 
-      # ---------- CẤU HÌNH VNC (x11vnc) ----------
+      # ---------- KHỞI TẠO X SERVER ẢO VÀ VNC ----------
       - name: 🔧 CẤU HÌNH REMOTE SCREEN (VNC)
         run: |
           echo ""
           echo "🔧 CẤU HÌNH REMOTE SCREEN VNC..."
 
-          # macOS runner có sẵn DISPLAY=:0, sử dụng trực tiếp
-          export DISPLAY=:0
+          # Tạo X server ảo sử dụng Xvfb (có sẵn trong xorg-server)
+          # Xvfb tạo một màn hình ảo trong bộ nhớ
+          export DISPLAY=:99
           
-          # Kiểm tra display
-          if [ -z "$DISPLAY" ]; then
-            echo "│ ⚠️  Không tìm thấy DISPLAY, sử dụng :0"
-            export DISPLAY=:0
-          fi
+          echo "│ 📋 Khởi tạo X server ảo (Xvfb)..."
+          Xvfb :99 -screen 0 1280x1024x24 &
+          XVFB_PID=$!
           
-          # Kiểm tra xem có thể truy cập display không
-          if ! xdpyinfo 2>/dev/null; then
-            echo "│ ⚠️  Display không khả dụng, sẽ sử dụng Xvfb (cần cài đặt)"
-            # Cài XQuartz (cung cấp X server cho macOS)
-            brew install --cask xquartz
-            # Khởi động X server
-            open -a XQuartz
-            sleep 10
+          # Đợi Xvfb khởi tạo
+          sleep 5
+          
+          # Kiểm tra Xvfb đang chạy
+          if ! ps -p $XVFB_PID > /dev/null 2>&1; then
+            echo "│ ❌ Xvfb không khởi động được"
+            exit 1
           fi
+          echo "│ ✅ Xvfb đang chạy với PID: $XVFB_PID"
 
-          # Khởi động x11vnc với mật khẩu
+          # Thiết lập môi trường cho X session
+          export DISPLAY=:99
+          export XDG_RUNTIME_DIR=/tmp/xdg-runtime
+          mkdir -p $XDG_RUNTIME_DIR
+          
+          # Khởi tạo một session manager đơn giản
+          echo "│ 📋 Khởi tạo X session..."
+          
+          # Chạy một window manager tối thiểu để có thể tương tác
+          # Sử dụng fluxbox (cài qua brew) hoặc dùng xterm đơn giản
+          if ! command -v fluxbox &>/dev/null; then
+            brew install fluxbox
+          fi
+          
+          # Start fluxbox window manager
+          fluxbox -display :99 &
+          sleep 3
+
+          # Start một terminal để có thể tương tác
+          xterm -display :99 -geometry 80x24+100+100 &
+          sleep 2
+
+          # Khởi động x11vnc kết nối tới Xvfb
           echo "│ 📋 Khởi động x11vnc VNC server..."
           
-          # Tạo file mật khẩu đúng định dạng cho x11vnc
+          # Tạo file mật khẩu
           echo "$VNC_PASS" | x11vnc -storepasswd - > ~/.vnc/passwd 2>/dev/null
           chmod 600 ~/.vnc/passwd
 
           # Chạy x11vnc
-          nohup x11vnc -display "$DISPLAY" \
+          nohup x11vnc -display :99 \
                        -rfbauth ~/.vnc/passwd \
                        -forever \
                        -shared \
                        -rfbport 5900 \
+                       -xkb \
                        -logfile ~/.vnc/x11vnc.log \
                        > ~/.vnc/vnc.log 2>&1 &
 
@@ -163,26 +182,52 @@ jobs:
           # Kiểm tra VNC server đang chạy
           if pgrep -f x11vnc > /dev/null; then
             echo "│ ✅ x11vnc đang chạy trên port 5900"
+            echo "│ ✅ Màn hình ảo đã sẵn sàng"
           else
-            echo "│ ❌ x11vnc không khởi động được, thử lại với cách khác..."
-            # Thử chạy không có password auth
-            nohup x11vnc -display "$DISPLAY" \
-                         -passwd "$VNC_PASS" \
-                         -forever \
-                         -shared \
-                         -rfbport 5900 \
-                         > ~/.vnc/vnc.log 2>&1 &
-            sleep 3
-            if pgrep -f x11vnc > /dev/null; then
-              echo "│ ✅ x11vnc đã khởi động thành công (không auth file)"
-            else
-              echo "│ ❌ Vẫn không khởi động được, kiểm tra log:"
-              cat ~/.vnc/vnc.log
-              exit 1
-            fi
+            echo "│ ❌ x11vnc không khởi động được"
+            cat ~/.vnc/vnc.log
+            exit 1
           fi
 
           echo "✅ Cấu hình VNC hoàn tất!"
+
+      # ---------- CÀI ĐẶT MÔI TRƯỜNG DESKTOP (XFCE) ----------
+      - name: 🖥️ CÀI ĐẶT XFCE DESKTOP
+        run: |
+          echo ""
+          echo "🖥️  ĐANG CÀI ĐẶT XFCE DESKTOP..."
+
+          # Cài XFCE và các gói cần thiết
+          brew install xfce4-session xfce4-panel xfce4-settings \
+                       xfdesktop xfwm4 thunar xfce4-terminal \
+                       mousepad ristretto
+
+          # Tạo cấu hình cho XFCE
+          mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml/
+          
+          # Tạo file cấu hình xfce4-session
+          cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <channel name="xfce4-session" version="1.0">
+            <property name="general" type="empty">
+              <property name="FailsafeSessionName" type="string" value="Default"/>
+            </property>
+          </channel>
+          EOF
+
+          # Tạo file .xsession
+          echo "xfce4-session" > ~/.xsession
+          echo "exec xfce4-session" > ~/.xinitrc
+
+          # Khởi động XFCE session trên display :99
+          export DISPLAY=:99
+          export XDG_RUNTIME_DIR=/tmp/xdg-runtime
+          
+          echo "│ 📋 Khởi động XFCE desktop..."
+          xfce4-session --display :99 &
+          sleep 10
+
+          echo "✅ XFCE desktop đã được cài đặt!"
 
       # ---------- TAILSCALE ----------
       - name: 🌐 THIẾT LẬP MẠNG PREMIUM
@@ -259,7 +304,7 @@ jobs:
           echo "│ 🌐  Địa chỉ IP: $TAILSCALE_IP"
           echo "│ 👤  Tài khoản: AISTV-PREMIUM"
           echo "│ 🔐  Mật khẩu VNC: $PASSWORD"
-          echo "│ 🔐  SSH Password: $PASSWORD (cùng mật khẩu)"
+          echo "│ 🔐  SSH Password: $PASSWORD"
           echo "│ ⏰  Thời lượng: $DISPLAY_TIME"
           echo "│ 🕐  Bắt đầu: $START_DATE (UTC)"
           echo "│ 🕐  Kết thúc: $END_DATE (UTC)"
@@ -302,7 +347,6 @@ jobs:
           echo "🔗 Kết nối SSH: $TAILSCALE_IP:22"
           echo ""
 
-          # Giám sát VNC server
           while true; do
             NOW=$(date -u "+%s")
             REMAINING=$((END_EPOCH - NOW))
@@ -315,8 +359,12 @@ jobs:
             if (( REMAINING % 120 < 5 )); then
               if ! pgrep -f x11vnc > /dev/null; then
                 echo -e "\n⚠️  VNC server đã dừng, khởi động lại..."
-                export DISPLAY=:0
-                nohup x11vnc -display "$DISPLAY" -passwd "$VNC_PASS" -forever -shared -rfbport 5900 &
+                export DISPLAY=:99
+                nohup x11vnc -display :99 -rfbauth ~/.vnc/passwd -forever -shared -rfbport 5900 -xkb &
+              fi
+              if ! pgrep -f Xvfb > /dev/null; then
+                echo -e "\n⚠️  Xvfb đã dừng, khởi động lại..."
+                Xvfb :99 -screen 0 1280x1024x24 &
               fi
             fi
             
@@ -337,8 +385,11 @@ jobs:
           echo ""
           echo "🧹 ĐANG DỌN DẸP HỆ THỐNG..."
 
-          # Dừng VNC servers
+          # Dừng tất cả các process
           pkill -f x11vnc 2>/dev/null || true
+          pkill -f Xvfb 2>/dev/null || true
+          pkill -f fluxbox 2>/dev/null || true
+          pkill -f xfce4-session 2>/dev/null || true
 
           # Xóa file mật khẩu
           rm -f /tmp/vnc_password.txt
