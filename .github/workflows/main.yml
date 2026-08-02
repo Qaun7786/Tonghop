@@ -1,4 +1,4 @@
-name: 🍎 macOS STV PREMIUM (VNC Remote)
+name: 🍎 macOS STV PREMIUM (VNC Remote - Native)
 
 on:
   workflow_dispatch:
@@ -42,7 +42,7 @@ jobs:
           echo -e "\r✅ Hệ thống đã sẵn sàng!                    "
 
       # ---------- CÀI ĐẶT CÔNG CỤ ----------
-      - name: 🖥️ CÀI ĐẶT VNC SERVER & X SERVER
+      - name: 🖥️ CÀI ĐẶT VNC SERVER
         run: |
           echo ""
           echo "🖥️  ĐANG CÀI ĐẶT VNC SERVER..."
@@ -54,16 +54,13 @@ jobs:
             eval "$(/opt/homebrew/bin/brew shellenv)"
           fi
 
-          # Cài đặt các gói cần thiết
-          brew install x11vnc tigervnc-viewer
-          
-          # Cài XQuartz (cung cấp X server)
-          brew install --cask xquartz
+          # Cài đặt x11vnc (VNC server)
+          brew install x11vnc
 
           # Tạo thư mục cho VNC
           mkdir -p ~/.vnc
 
-          echo "✅ Cài đặt hoàn tất!"
+          echo "✅ Cài đặt VNC hoàn tất!"
 
       # ---------- TẠO USER VÀ MẬT KHẨU ----------
       - name: 👤 TẠO TÀI KHOẢN PREMIUM
@@ -116,108 +113,74 @@ jobs:
 
           echo "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng"
 
-      # ---------- CÀI ĐẶT XFCE VÀ KHỞI TẠO VNC ----------
-      - name: 🔧 CÀI ĐẶT XFCE & CẤU HÌNH VNC
+      # ---------- CẤU HÌNH SCREEN SHARING (TÍCH HỢP SẴN) ----------
+      - name: 🔧 CẤU HÌNH REMOTE SCREEN
         run: |
           echo ""
-          echo "🔧 CÀI ĐẶT XFCE DESKTOP VÀ CẤU HÌNH VNC..."
+          echo "🔧 CẤU HÌNH REMOTE SCREEN..."
 
-          # Cài đặt XFCE và các gói cần thiết
-          brew install xfce4-session xfce4-panel xfce4-settings \
-                       xfdesktop xfwm4 thunar xfce4-terminal \
-                       mousepad ristretto
+          # Cách 1: Bật Apple Remote Desktop (ARD)
+          echo "│ 📋 Bật Apple Remote Desktop..."
+          
+          # Kích hoạt ARD Agent
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate \
+            -configure -access -on \
+            -configure -allowAccessFor -specifiedUsers \
+            -configure -users AISTV-PREMIUM \
+            -configure -restart -agent -menu
 
-          # Tạo cấu hình cho XFCE
-          mkdir -p ~/.config/xfce4/xfconf/xfce-perchannel-xml/
-          mkdir -p ~/.config/xfce4-session/
-          
-          # Tạo file cấu hình xfce4-session
-          cat > ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <channel name="xfce4-session" version="1.0">
-            <property name="general" type="empty">
-              <property name="FailsafeSessionName" type="string" value="Default"/>
-              <property name="SessionName" type="string" value="Default"/>
-              <property name="SaveOnExit" type="bool" value="false"/>
-            </property>
-          </channel>
-          EOF
+          # Đặt mật khẩu VNC cho ARD
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -configure -clientopts -setvnclegacy -vnclegacy yes \
+            -configure -clientopts -setvncpw -vncpw "$VNC_PASS"
 
-          # Tạo file .xsession
-          echo "xfce4-session" > ~/.xsession
-          echo "exec xfce4-session" > ~/.xinitrc
+          # Restart ARD
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
 
-          # Tạo X server ảo sử dụng Xvfb (từ XQuartz)
-          export DISPLAY=:99
+          echo "│ ✅ Apple Remote Desktop đã được bật!"
+
+          # Cách 2: Chạy x11vnc như một fallback (nếu ARD không hoạt động)
+          echo "│ 📋 Khởi động x11vnc (fallback)..."
           
-          echo "│ 📋 Khởi tạo X server ảo (Xvfb)..."
-          # Sử dụng Xvfb từ XQuartz
-          /opt/X11/bin/Xvfb :99 -screen 0 1280x1024x24 &
-          XVFB_PID=$!
+          # Lấy display hiện tại hoặc tạo mới
+          export DISPLAY=:0
           
-          # Đợi Xvfb khởi tạo
-          sleep 5
-          
-          # Kiểm tra Xvfb đang chạy
-          if ! ps -p $XVFB_PID > /dev/null 2>&1; then
-            echo "│ ❌ Xvfb không khởi động được"
-            exit 1
+          # Kiểm tra display
+          if ! command -v xdpyinfo &>/dev/null || ! xdpyinfo -display :0 2>/dev/null; then
+            echo "│ ⚠️  Display :0 không tồn tại, sử dụng màn hình ảo"
+            
+            # Cài XQuartz
+            brew install --cask xquartz
+            
+            # Khởi động XQuartz
+            open -a XQuartz
+            sleep 5
+            
+            export DISPLAY=:0
           fi
-          echo "│ ✅ Xvfb đang chạy với PID: $XVFB_PID"
 
-          # Thiết lập môi trường cho X session
-          export DISPLAY=:99
-          export XDG_RUNTIME_DIR=/tmp/xdg-runtime
-          mkdir -p $XDG_RUNTIME_DIR
-          
-          # Khởi động XFCE session
-          echo "│ 📋 Khởi động XFCE desktop..."
-          xfce4-session --display :99 &
-          
-          # Đợi XFCE khởi tạo
-          sleep 10
-
-          # Khởi động x11vnc kết nối tới Xvfb
-          echo "│ 📋 Khởi động x11vnc VNC server..."
-          
           # Tạo file mật khẩu
           echo "$VNC_PASS" | x11vnc -storepasswd - > ~/.vnc/passwd 2>/dev/null
           chmod 600 ~/.vnc/passwd
 
           # Chạy x11vnc
-          nohup x11vnc -display :99 \
+          nohup x11vnc -display :0 \
                        -rfbauth ~/.vnc/passwd \
                        -forever \
                        -shared \
-                       -rfbport 5900 \
+                       -rfbport 5901 \
                        -xkb \
-                       -noxrecord \
-                       -noxfixes \
-                       -noxdamage \
                        -logfile ~/.vnc/x11vnc.log \
                        > ~/.vnc/vnc.log 2>&1 &
 
-          # Đợi VNC server khởi động
-          sleep 5
+          sleep 3
 
-          # Kiểm tra VNC server đang chạy
           if pgrep -f x11vnc > /dev/null; then
-            echo "│ ✅ x11vnc đang chạy trên port 5900"
-            echo "│ ✅ Màn hình ảo đã sẵn sàng"
+            echo "│ ✅ x11vnc đang chạy trên port 5901 (fallback)"
           else
-            echo "│ ❌ x11vnc không khởi động được"
-            echo "│ 📋 Log file:"
-            cat ~/.vnc/vnc.log
-            exit 1
-          fi
-
-          # Kiểm tra XFCE đang chạy
-          if pgrep -f xfce4-session > /dev/null; then
-            echo "│ ✅ XFCE session đang chạy"
-          else
-            echo "│ ⚠️  XFCE session không chạy, thử khởi động lại..."
-            xfce4-session --display :99 &
-            sleep 5
+            echo "│ ⚠️  x11vnc không chạy, log:"
+            cat ~/.vnc/vnc.log 2>/dev/null || echo "No log"
           fi
 
           echo "✅ Cấu hình hoàn tất!"
@@ -270,6 +233,21 @@ jobs:
             echo "TAILSCALE_IP=localhost" >> $GITHUB_ENV
           fi
 
+      # ---------- CÀI ĐẶT THÊM ỨNG DỤNG CHO MACOS ----------
+      - name: 📦 CÀI ĐẶT ỨNG DỤNG HỮU ÍCH
+        run: |
+          echo ""
+          echo "📦 CÀI ĐẶT ỨNG DỤNG HỮU ÍCH..."
+
+          # Cài đặt các ứng dụng phổ biến
+          brew install --cask firefox google-chrome visual-studio-code \
+                       sublime-text slack discord
+
+          # Cài đặt công cụ dòng lệnh
+          brew install git wget curl htop nano vim tmux screenfetch
+
+          echo "✅ Cài đặt ứng dụng hoàn tất!"
+
       # ---------- HIỂN THỊ THÔNG TIN ----------
       - name: 🎉 THÔNG TIN KẾT NỐI
         run: |
@@ -296,29 +274,35 @@ jobs:
           echo "├───────────────────────────────────────────────────────┤"
           echo "│ 🌐  Địa chỉ IP: $TAILSCALE_IP"
           echo "│ 👤  Tài khoản: AISTV-PREMIUM"
-          echo "│ 🔐  Mật khẩu VNC: $PASSWORD"
-          echo "│ 🔐  SSH Password: $PASSWORD"
+          echo "│ 🔐  Mật khẩu: $PASSWORD"
           echo "│ ⏰  Thời lượng: $DISPLAY_TIME"
           echo "│ 🕐  Bắt đầu: $START_DATE (UTC)"
           echo "│ 🕐  Kết thúc: $END_DATE (UTC)"
           echo "├───────────────────────────────────────────────────────┤"
-          echo "│ 📍  PORT: 5900 (VNC)                                        │"
-          echo "│ 📍  PORT: 22 (SSH)                                         │"
+          echo "│ 📍  PORT: 5900 (Apple Remote Desktop - ưu tiên)      │"
+          echo "│ 📍  PORT: 5901 (x11vnc - fallback)                   │"
+          echo "│ 📍  PORT: 22 (SSH)                                   │"
           echo "├───────────────────────────────────────────────────────┤"
           echo "│ 💡  HƯỚNG DẪN KẾT NỐI:                                    │"
           echo "│                                                               │"
-          echo "│  Cách 1 - VNC Client (GUI):                                  │"
-          echo "│    - macOS: Mở Finder → Go → Connect to Server              │"
+          echo "│  Cách 1 - Apple Remote Desktop (VNC - ưu tiên):             │"
+          echo "│    - macOS: Finder → Go → Connect to Server                 │"
           echo "│      Nhập: vnc://$TAILSCALE_IP                              │"
-          echo "│    - Windows: Dùng TigerVNC, RealVNC, TightVNC              │"
-          echo "│      Server: $TAILSCALE_IP:5900                            │"
-          echo "│    - Linux: Dùng Remmina, TigerVNC, Vinagre                 │"
+          echo "│    - Windows/Linux: VNC Viewer → $TAILSCALE_IP:5900        │"
           echo "│                                                               │"
-          echo "│  Cách 2 - SSH (terminal):                                     │"
+          echo "│  Cách 2 - x11vnc (fallback):                                 │"
+          echo "│    - VNC Viewer → $TAILSCALE_IP:5901                       │"
+          echo "│                                                               │"
+          echo "│  Cách 3 - SSH (terminal):                                    │"
           echo "│    ssh AISTV-PREMIUM@$TAILSCALE_IP                         │"
           echo "│    Password: $PASSWORD                                      │"
           echo "├───────────────────────────────────────────────────────┤"
-          echo "│ 🚀  Enjoy your remote macOS session with XFCE!               │"
+          echo "│ 📦  Ứng dụng đã cài:                                        │"
+          echo "│    - Firefox, Google Chrome, VS Code, Sublime Text          │"
+          echo "│    - Slack, Discord                                         │"
+          echo "│    - Git, wget, curl, htop, vim, tmux                      │"
+          echo "├───────────────────────────────────────────────────────┤"
+          echo "│ 🚀  Enjoy your remote macOS session!                           │"
           echo "└───────────────────────────────────────────────────────┘"
 
           echo "TOTAL_MINUTES=$TOTAL_MINUTES" >> $GITHUB_ENV
@@ -335,8 +319,8 @@ jobs:
 
           echo ""
           echo "🔄 BẮT ĐẦU DUY TRÌ PHIÊN LÀM VIỆC..."
-          echo "💎 Phiên: AI STV PREMIUM (macOS VNC)"
-          echo "🔗 Kết nối VNC: $TAILSCALE_IP:5900"
+          echo "💎 Phiên: AI STV PREMIUM (macOS Native)"
+          echo "🔗 Kết nối VNC: $TAILSCALE_IP:5900 (ưu tiên)"
           echo "🔗 Kết nối SSH: $TAILSCALE_IP:22"
           echo ""
 
@@ -348,22 +332,20 @@ jobs:
               break
             fi
             
-            # Kiểm tra các process mỗi 2 phút
+            # Kiểm tra các service mỗi 2 phút
             if (( REMAINING % 120 < 5 )); then
+              # Kiểm tra Apple Remote Desktop
+              if ! pgrep -f ARDAgent > /dev/null; then
+                echo -e "\n⚠️  ARDAgent đã dừng, khởi động lại..."
+                sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
+              fi
+              
+              # Kiểm tra x11vnc
               if ! pgrep -f x11vnc > /dev/null; then
-                echo -e "\n⚠️  VNC server đã dừng, khởi động lại..."
-                export DISPLAY=:99
+                echo -e "\n⚠️  x11vnc đã dừng, khởi động lại..."
+                export DISPLAY=:0
                 echo "$VNC_PASS" | x11vnc -storepasswd - > ~/.vnc/passwd 2>/dev/null
-                nohup x11vnc -display :99 -rfbauth ~/.vnc/passwd -forever -shared -rfbport 5900 -xkb -noxrecord -noxfixes -noxdamage &
-              fi
-              if ! pgrep -f Xvfb > /dev/null; then
-                echo -e "\n⚠️  Xvfb đã dừng, khởi động lại..."
-                /opt/X11/bin/Xvfb :99 -screen 0 1280x1024x24 &
-              fi
-              if ! pgrep -f xfce4-session > /dev/null; then
-                echo -e "\n⚠️  XFCE session đã dừng, khởi động lại..."
-                export DISPLAY=:99
-                xfce4-session --display :99 &
+                nohup x11vnc -display :0 -rfbauth ~/.vnc/passwd -forever -shared -rfbport 5901 -xkb &
               fi
             fi
             
@@ -386,8 +368,9 @@ jobs:
 
           # Dừng tất cả các process
           pkill -f x11vnc 2>/dev/null || true
-          pkill -f Xvfb 2>/dev/null || true
-          pkill -f xfce4-session 2>/dev/null || true
+          
+          # Tắt Apple Remote Desktop
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate -configure -access -off 2>/dev/null || true
 
           # Xóa file mật khẩu
           rm -f /tmp/vnc_password.txt
