@@ -54,7 +54,7 @@ jobs:
             eval "$(/opt/homebrew/bin/brew shellenv)"
           fi
 
-          # Cài đặt x11vnc (VNC server)
+          # Cài đặt x11vnc (VNC server) - đây là phương pháp chính
           brew install x11vnc
 
           # Cài đặt tigervnc-viewer (để test)
@@ -116,68 +116,73 @@ jobs:
 
           echo "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng"
 
-      # ---------- CẤU HÌNH VNC (Dùng Apple Screen Sharing) ----------
+      # ---------- CẤU HÌNH VNC (x11vnc) ----------
       - name: 🔧 CẤU HÌNH REMOTE SCREEN (VNC)
         run: |
           echo ""
-          echo "🔧 CẤU HÌNH REMOTE SCREEN..."
+          echo "🔧 CẤU HÌNH REMOTE SCREEN VNC..."
 
-          # Cách 1: Sử dụng tính năng Screen Sharing của macOS (tích hợp sẵn)
-          echo "│ 📋 Bật Screen Sharing (Apple Remote Desktop)..."
-          
-          # Bật Screen Sharing
-          sudo /usr/bin/screen-sharing -enable
-          
-          # Mở port 5900 trong firewall
-          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /System/Library/CoreServices/RemoteManagement/AppleVNCServer.bundle/Contents/MacOS/AppleVNCServer
-          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblock /System/Library/CoreServices/RemoteManagement/AppleVNCServer.bundle/Contents/MacOS/AppleVNCServer
-
-          # Đặt mật khẩu VNC cho Screen Sharing
-          echo "│ 📋 Đặt mật khẩu VNC..."
-          
-          # Tạo file mật khẩu cho Apple VNC
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -configure -clientopts -setvnclegacy -vnclegacy yes \
-            -clientopts -setvncpw -vncpw "$VNC_PASS" \
-            -clientopts -restart -agent -privs -all
-
-          # Restart ARDAgent để áp dụng
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
-
-          echo "│ ✅ Screen Sharing đã được bật!"
-
-          # Cách 2: Fallback với x11vnc (nếu cần)
-          echo "│ 📋 Khởi động x11vnc (fallback)..."
-          
-          # Chạy x11vnc để share màn hình (có thể chạy song song)
-          # macOS thường có DISPLAY=:0 từ sẵn
+          # macOS runner có sẵn DISPLAY=:0, sử dụng trực tiếp
           export DISPLAY=:0
           
-          # Kiểm tra xem có display không
+          # Kiểm tra display
           if [ -z "$DISPLAY" ]; then
             echo "│ ⚠️  Không tìm thấy DISPLAY, sử dụng :0"
             export DISPLAY=:0
           fi
           
-          # Khởi động x11vnc
+          # Kiểm tra xem có thể truy cập display không
+          if ! xdpyinfo 2>/dev/null; then
+            echo "│ ⚠️  Display không khả dụng, sẽ sử dụng Xvfb (cần cài đặt)"
+            # Cài XQuartz (cung cấp X server cho macOS)
+            brew install --cask xquartz
+            # Khởi động X server
+            open -a XQuartz
+            sleep 10
+          fi
+
+          # Khởi động x11vnc với mật khẩu
+          echo "│ 📋 Khởi động x11vnc VNC server..."
+          
+          # Tạo file mật khẩu đúng định dạng cho x11vnc
+          echo "$VNC_PASS" | x11vnc -storepasswd - > ~/.vnc/passwd 2>/dev/null
+          chmod 600 ~/.vnc/passwd
+
+          # Chạy x11vnc
           nohup x11vnc -display "$DISPLAY" \
-                       -passwd "$VNC_PASS" \
+                       -rfbauth ~/.vnc/passwd \
                        -forever \
                        -shared \
-                       -rfbport 5901 \
+                       -rfbport 5900 \
                        -logfile ~/.vnc/x11vnc.log \
                        > ~/.vnc/vnc.log 2>&1 &
 
-          sleep 3
+          # Đợi VNC server khởi động
+          sleep 5
 
           # Kiểm tra VNC server đang chạy
           if pgrep -f x11vnc > /dev/null; then
-            echo "│ ✅ x11vnc đang chạy trên port 5901"
+            echo "│ ✅ x11vnc đang chạy trên port 5900"
           else
-            echo "│ ⚠️  x11vnc không chạy, chỉ sử dụng Apple Screen Sharing"
+            echo "│ ❌ x11vnc không khởi động được, thử lại với cách khác..."
+            # Thử chạy không có password auth
+            nohup x11vnc -display "$DISPLAY" \
+                         -passwd "$VNC_PASS" \
+                         -forever \
+                         -shared \
+                         -rfbport 5900 \
+                         > ~/.vnc/vnc.log 2>&1 &
+            sleep 3
+            if pgrep -f x11vnc > /dev/null; then
+              echo "│ ✅ x11vnc đã khởi động thành công (không auth file)"
+            else
+              echo "│ ❌ Vẫn không khởi động được, kiểm tra log:"
+              cat ~/.vnc/vnc.log
+              exit 1
+            fi
           fi
 
-          echo "✅ Cấu hình hoàn tất!"
+          echo "✅ Cấu hình VNC hoàn tất!"
 
       # ---------- TAILSCALE ----------
       - name: 🌐 THIẾT LẬP MẠNG PREMIUM
@@ -253,25 +258,27 @@ jobs:
           echo "├───────────────────────────────────────────────────────┤"
           echo "│ 🌐  Địa chỉ IP: $TAILSCALE_IP"
           echo "│ 👤  Tài khoản: AISTV-PREMIUM"
-          echo "│ 🔐  Mật khẩu: $PASSWORD"
+          echo "│ 🔐  Mật khẩu VNC: $PASSWORD"
+          echo "│ 🔐  SSH Password: $PASSWORD (cùng mật khẩu)"
           echo "│ ⏰  Thời lượng: $DISPLAY_TIME"
           echo "│ 🕐  Bắt đầu: $START_DATE (UTC)"
           echo "│ 🕐  Kết thúc: $END_DATE (UTC)"
           echo "├───────────────────────────────────────────────────────┤"
-          echo "│ 📍  PORT VNC:                                             │"
-          echo "│    - Apple Screen Sharing: 5900 (mặc định)               │"
-          echo "│    - x11vnc (fallback): 5901                             │"
+          echo "│ 📍  PORT: 5900 (VNC)                                        │"
+          echo "│ 📍  PORT: 22 (SSH)                                         │"
           echo "├───────────────────────────────────────────────────────┤"
-          echo "│ 💡  HƯỚNG DẪN KẾT NỐI (CHỌN 1):                        │"
+          echo "│ 💡  HƯỚNG DẪN KẾT NỐI:                                    │"
           echo "│                                                               │"
-          echo "│  Cách 1 - VNC Client:                                        │"
+          echo "│  Cách 1 - VNC Client (GUI):                                  │"
           echo "│    - macOS: Mở Finder → Go → Connect to Server              │"
-          echo "│      Nhập: vnc://$TAILSCALE_IP:5900                       │"
-          echo "│    - Windows/Linux: Dùng VNC Viewer (TigerVNC, RealVNC)   │"
+          echo "│      Nhập: vnc://$TAILSCALE_IP                              │"
+          echo "│    - Windows: Dùng TigerVNC, RealVNC, TightVNC              │"
+          echo "│      Server: $TAILSCALE_IP:5900                            │"
+          echo "│    - Linux: Dùng Remmina, TigerVNC, Vinagre                 │"
           echo "│                                                               │"
-          echo "│  Cách 2 - SSH Tunnel (an toàn hơn):                          │"
-          echo "│    ssh -L 5900:localhost:5900 AISTV-PREMIUM@$TAILSCALE_IP   │"
-          echo "│    Sau đó kết nối VNC tới localhost:5900                    │"
+          echo "│  Cách 2 - SSH (terminal):                                     │"
+          echo "│    ssh AISTV-PREMIUM@$TAILSCALE_IP                         │"
+          echo "│    Password: $PASSWORD                                      │"
           echo "├───────────────────────────────────────────────────────┤"
           echo "│ 🚀  Enjoy your remote macOS session!                           │"
           echo "└───────────────────────────────────────────────────────┘"
@@ -291,7 +298,8 @@ jobs:
           echo ""
           echo "🔄 BẮT ĐẦU DUY TRÌ PHIÊN LÀM VIỆC..."
           echo "💎 Phiên: AI STV PREMIUM (macOS VNC)"
-          echo "🔗 Kết nối VNC: $TAILSCALE_IP:5900 hoặc :5901"
+          echo "🔗 Kết nối VNC: $TAILSCALE_IP:5900"
+          echo "🔗 Kết nối SSH: $TAILSCALE_IP:22"
           echo ""
 
           # Giám sát VNC server
@@ -303,19 +311,12 @@ jobs:
               break
             fi
             
-            # Kiểm tra các VNC server mỗi 2 phút
+            # Kiểm tra VNC server mỗi 2 phút
             if (( REMAINING % 120 < 5 )); then
-              # Kiểm tra Apple Screen Sharing
-              if ! pgrep -f AppleVNCServer > /dev/null; then
-                echo -e "\n⚠️  AppleVNCServer đã dừng, khởi động lại..."
-                sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
-              fi
-              
-              # Kiểm tra x11vnc
               if ! pgrep -f x11vnc > /dev/null; then
-                echo -e "\n⚠️  x11vnc đã dừng, khởi động lại..."
+                echo -e "\n⚠️  VNC server đã dừng, khởi động lại..."
                 export DISPLAY=:0
-                nohup x11vnc -display "$DISPLAY" -passwd "$VNC_PASS" -forever -shared -rfbport 5901 &
+                nohup x11vnc -display "$DISPLAY" -passwd "$VNC_PASS" -forever -shared -rfbport 5900 &
               fi
             fi
             
@@ -338,10 +339,6 @@ jobs:
 
           # Dừng VNC servers
           pkill -f x11vnc 2>/dev/null || true
-          
-          # Tắt Screen Sharing
-          sudo /usr/bin/screen-sharing -disable 2>/dev/null || true
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate -configure -access -off 2>/dev/null || true
 
           # Xóa file mật khẩu
           rm -f /tmp/vnc_password.txt
